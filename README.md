@@ -40,7 +40,7 @@ cd InkReader-linux && ./install.sh
 
 Скрипт поставить програму в `~/.local/share/InkReader` і додасть ярлик у меню. Також можна просто запустити `InkReader/InkReader` без встановлення. Книги відкриваються й через «Відкрити за допомогою» у файловому менеджері.
 
-**Windows** (10/11, x64): розпакуйте `InkReader-windows.zip` і запустіть `InkReader.exe`. Установлення не потрібне. Windows може застерегти про невідомого видавця, бо програма не підписана: натисніть «Докладніше» → «Все одно виконати».
+**Windows** (10/11, x64): завантажте `InkReader-setup.exe` і запустіть його: програма встановиться в профіль користувача (адміністратор не потрібен), з ярликом у меню «Пуск» та, за бажанням, відкриттям `.epub` і `.fb2`. Windows може застерегти про невідомого видавця, бо програма не підписана: натисніть «Докладніше» → «Все одно виконати».
 
 ## Клавіші (комп'ютер)
 
@@ -73,7 +73,7 @@ pip install -r requirements.txt
 ./scripts/package_linux.sh       # dist/InkReader-linux.tar.xz
 ```
 
-**Windows** (PyInstaller) збирається автоматично на GitHub Actions (`.github/workflows/windows.yml`) і потрапляє в реліз як `InkReader-windows.zip`. Локально на Windows те саме робить `scripts\build_windows.ps1`.
+**Windows** (PyInstaller) збирається автоматично на GitHub Actions (`.github/workflows/windows.yml`) і потрапляє в реліз як інсталятор `InkReader-setup.exe` (Inno Setup, `scripts/installer.iss`). Локально на Windows те саме робить `scripts\build_windows.ps1` (для інсталятора потрібен Inno Setup 6).
 
 **Android** (buildozer, потрібні Linux та JDK 17):
 

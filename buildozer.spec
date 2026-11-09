@@ -6,6 +6,8 @@ source.dir = src
 source.include_exts = py,png,jpg,kv,atlas,ttf
 version = 0.1
 icon.filename = %(source.dir)s/icon.png
+presplash.filename = assets/presplash.png
+android.presplash_color = #E6E6E0
 requirements = python3,kivy==2.3.0,plyer,android
 p4a.branch = v2024.01.21
 orientation = portrait

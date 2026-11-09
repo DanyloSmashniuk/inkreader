@@ -105,13 +105,13 @@ footer{border-top:1px solid var(--line);padding-block:28px 48px;color:var(--mute
 var REPO = "DanyloSmashniuk/inkreader";
 var BASE = "https://github.com/" + REPO + "/releases/latest/download/";
 var LINKS = REPO.indexOf("USERNAME") === 0 ? { android: "", linux: "", windows: "" }
-  : { android: BASE + "InkReader.apk", linux: BASE + "InkReader-linux.tar.xz", windows: BASE + "InkReader-windows.zip" };
+  : { android: BASE + "InkReader.apk", linux: BASE + "InkReader-linux.tar.xz", windows: BASE + "InkReader-setup.exe" };
 (function(){
   var ua=(navigator.userAgent||'').toLowerCase();
   var os=ua.indexOf('android')>-1?'android':ua.indexOf('windows')>-1?'windows':(ua.indexOf('linux')>-1||ua.indexOf('x11')>-1)?'linux':'other';
   var btn=document.getElementById('dl'),hint=document.getElementById('hint');
   var names={android:'Android',linux:'Linux',windows:'Windows'};
-  var tips={android:'Файл APK. Дозвольте встановлення з цього джерела, коли Android запитає.',windows:'Розпакуйте ZIP і запустіть InkReader.exe. Якщо Windows застереже про невідомого видавця, натисніть «Докладніше» → «Все одно виконати».',linux:'Розпакуйте архів і запустіть ./install.sh'};
+  var tips={android:'Файл APK. Дозвольте встановлення з цього джерела, коли Android запитає.',windows:'Запустіть InkReader-setup.exe і пройдіть установлення. Якщо Windows застереже про невідомого видавця, натисніть «Докладніше» → «Все одно виконати».',linux:'Розпакуйте архів і запустіть ./install.sh'};
   function lock(txt){btn.textContent=txt;btn.setAttribute('aria-disabled','true');btn.addEventListener('click',function(e){e.preventDefault()})}
   if(os==='other'){hint.textContent='Є версії для Android, Windows і Linux. Відкрийте сайт на такому пристрої.';lock('Android, Windows і Linux')}
   else{hint.textContent=tips[os];var u=LINKS[os];if(u){btn.textContent='Завантажити для '+names[os];btn.href=u}else lock('Скоро')}

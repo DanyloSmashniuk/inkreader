@@ -1,10 +1,10 @@
 name: windows-build
-# Збирає InkReader для Windows і додає InkReader-windows.zip до релізу v<версія з buildozer.spec>.
+# Збирає InkReader для Windows і додає інсталятор InkReader-setup.exe до релізу v<версія з buildozer.spec>.
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['src/**', 'scripts/build_windows.ps1', '.github/workflows/windows.yml', 'buildozer.spec']
+    paths: ['src/**', 'scripts/build_windows.ps1', 'scripts/installer.iss', '.github/workflows/windows.yml', 'buildozer.spec']
 
 permissions:
   contents: write
@@ -22,14 +22,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
       - name: Збірка
         shell: pwsh
         timeout-minutes: 20
         run: ./scripts/build_windows.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: InkReader-windows
-          path: dist/InkReader-windows.zip
+          name: InkReader-setup
+          path: dist/InkReader-setup.exe
       - name: Додати до релізу
         shell: bash
         env:
@@ -38,7 +41,8 @@ jobs:
           VERSION=$(grep -E '^version *=' buildozer.spec | head -1 | sed -E 's/^version *= *//' | tr -d '\r ')
           TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/InkReader-windows.zip --clobber
+            gh release upload "$TAG" dist/InkReader-setup.exe --clobber
+            gh release delete-asset "$TAG" InkReader-windows.zip -y 2>/dev/null || true
             echo "Завантажено в реліз $TAG"
           else
             echo "Релізу $TAG ще немає: архів лише в артефактах цього запуску"
