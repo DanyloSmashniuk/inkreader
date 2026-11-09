@@ -18,7 +18,10 @@ pos[i] — позиція (блок, зсув) початку сторінки (
   * заголовок не лишається один унизу сторінки;
   * слово переноситься лише тоді, коли без переносу пробіли розтягнулися б надто сильно,
     і не більше двох переносів підряд;
-  * велика картинка отримує власну сторінку.
+  * картинка не вища за ~55% сторінки, тож поруч із нею завжди є місце для тексту;
+  * підпис («Рис. 12 …») завжди стоїть разом із картинкою;
+  * якщо картинка з підписом не влазить унизу, вона переходить на початок наступної
+    сторінки, а текст далі заповнює залишок (без порожніх половин сторінки).
 """
 import math
 import re
@@ -26,6 +29,9 @@ import re
 from hyph import hyph_points
 
 _TOK = re.compile(r'\S+')
+_CAPTION = re.compile(r'^\s*(рис(унок|\.)?|фото(графія)?|іл(юстрація|\.)|ил(люстрация|\.)|схема|діаграма|'
+                      r'табл(иця|\.)?|fig(ure|\.)?|photo|image|table|chart)\b', re.I)
+IMG_MAX_ROWS = 0.55    # найбільша висота картинки, частка сторінки
 
 
 class Geometry:
@@ -58,6 +64,7 @@ def typeset(blocks, chapters, img_sizes, geo, width):
     rows, ncols, col_w, lh = geo.rows, geo.n_cols, geo.col_w, geo.lh
     pages, poss = [], []
     cur, col, row, pos0 = [], 0, 0, None
+    pending = None          # картинка з підписом, що чекає початку наступної сторінки
     breaks_cache = {}
 
     # ---------------------------------------------------------------- переноси
@@ -145,7 +152,9 @@ def typeset(blocks, chapters, img_sizes, geo, width):
     # ----------------------------------------------------------------- сторінки
     def flush():
         nonlocal cur, col, row, pos0
-        if cur and pos0 is not None:
+        if cur:
+            if pos0 is None:
+                pos0 = (cur[0][2][1], 0)
             pages.append(cur)
             poss.append(pos0)
         cur, col, row, pos0 = [], 0, 0, None
@@ -156,12 +165,13 @@ def typeset(blocks, chapters, img_sizes, geo, width):
             col, row = col + 1, 0
         else:
             flush()
+        place_pending()
 
     def put(item, n, pos):
         nonlocal row, pos0
         cur.append((col, row, item))
         row += n
-        if pos0 is None:
+        if pos0 is None and pos is not None:
             pos0 = pos
 
     def gap(n=1):
@@ -196,23 +206,44 @@ def typeset(blocks, chapters, img_sizes, geo, width):
             if i < n:
                 new_col()
 
+    def place_group(g):
+        """Картинка та її підпис (якщо є) — одним шматком."""
+        bi, path, w, h, k, cap_bi, cap_lines = g
+        put(('i', bi, path, w, h, k), k, None)
+        if cap_bi is not None:
+            place_par(cap_bi, cap_lines, 'p0', True)
+
+    def place_pending():
+        nonlocal pending
+        if pending is not None:
+            g, pending = pending, None
+            place_group(g)
+
+    skip = set()
     for bi, (kind, text) in enumerate(blocks):
+        if bi in skip:
+            continue
         if kind == 'i':
             size = img_sizes.get(text)
             if not size:
                 continue
             sw, sh = size
-            scale = min(col_w / sw, (rows - 0.5) * lh / sh, 3.0)
+            scale = min(col_w / sw, IMG_MAX_ROWS * rows * lh / sh, 3.0)
             w, h = sw * scale, sh * scale
             k = min(rows, max(1, int(math.ceil((h + 0.5 * lh) / lh))))
-            big = k >= 0.6 * rows                            # велика картинка — окрема сторінка
-            if big and cur:
-                flush()
-            elif rows - row < k:
-                new_col()
-            put(('i', bi, text, w, h, k), k, (bi, 0))
-            if big:
-                flush()
+            cap_bi, cap_lines = None, []
+            nxt = blocks[bi + 1] if bi + 1 < len(blocks) else None
+            if nxt and nxt[0] == 'p' and len(nxt[1]) <= 400 and _CAPTION.match(nxt[1]):
+                cap_bi = bi + 1
+                cap_lines = wrap(nxt[1], False, geo.indent, geo.hyph)
+                skip.add(cap_bi)
+            need = k + len(cap_lines)
+            if pending is not None:
+                new_col()                                    # попередня картинка йде першою
+            if row == 0 or rows - row >= need:
+                place_group((bi, text, w, h, k, cap_bi, cap_lines))
+            else:
+                pending = (bi, text, w, h, k, cap_bi, cap_lines)
         elif kind == 's':
             if rows - row < 3:
                 new_col()
@@ -223,6 +254,9 @@ def typeset(blocks, chapters, img_sizes, geo, width):
             lines = wrap(text, True, 0, False)
             if bi in chapters:
                 if cur:
+                    flush()
+                if pending is not None:                      # картинка не переходить у наступний розділ
+                    place_pending()
                     flush()
                 row = 1                                      # повітря над заголовком розділу
             else:
@@ -236,6 +270,8 @@ def typeset(blocks, chapters, img_sizes, geo, width):
             place_par(bi, wrap(text, False, 0, False), 'p', False)
         else:
             place_par(bi, wrap(text, False, geo.indent, geo.hyph), 'p0', True)
+    if pending is not None:
+        new_col() if cur else place_pending()
     flush()
     if not pages:
         pages, poss = [[]], [(0, 0)]

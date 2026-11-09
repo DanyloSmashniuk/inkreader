@@ -119,7 +119,7 @@ if ! gh repo view "$REPO" >/dev/null 2>&1; then
   gh repo create "$REPO" --public
 fi
 gh repo edit "$REPO" \
-  --description "Читалка EPUB і FB2 з режимом «електронні чорнила». Linux і Android." \
+  --description "Читалка EPUB і FB2 з режимом «електронні чорнила». Linux, Windows і Android." \
   --homepage "https://${OWNER}.github.io/${REPO_NAME}/" \
   --add-topic epub --add-topic fb2 --add-topic ebook-reader --add-topic kivy --add-topic e-ink >/dev/null 2>&1 || true
 
