@@ -12,6 +12,11 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # На віртуальній машині немає відеокарти: Kivy під час збірки має працювати через ANGLE (програмний OpenGL ES)
+      KIVY_GL_BACKEND: angle_sdl2
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,6 +24,7 @@ jobs:
           python-version: "3.11"
       - name: Збірка
         shell: pwsh
+        timeout-minutes: 20
         run: ./scripts/build_windows.ps1
       - uses: actions/upload-artifact@v4
         with:
