@@ -1,0 +1,39 @@
+name: windows-build
+# Збирає InkReader для Windows і додає InkReader-windows.zip до релізу v<версія з buildozer.spec>.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/**', 'scripts/build_windows.ps1', '.github/workflows/windows.yml', 'buildozer.spec']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Збірка
+        shell: pwsh
+        run: ./scripts/build_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InkReader-windows
+          path: dist/InkReader-windows.zip
+      - name: Додати до релізу
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep -E '^version *=' buildozer.spec | head -1 | sed -E 's/^version *= *//' | tr -d '\r ')
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/InkReader-windows.zip --clobber
+            echo "Завантажено в реліз $TAG"
+          else
+            echo "Релізу $TAG ще немає: архів лише в артефактах цього запуску"
+          fi

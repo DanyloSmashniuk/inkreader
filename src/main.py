@@ -1067,8 +1067,12 @@ class InkReaderApp(App):
                 places.append((label, d))
         if android:
             places[0] = ('Пам\'ять', root)
+        if platform == 'win':
+            for letter in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+                if os.path.isdir(letter + ':\\'):
+                    places.append((letter + ':', letter + ':\\'))
         chips = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        for label, d in places[:5]:
+        for label, d in places[:8]:
             chips.add_widget(flat_button(label, lambda d=d: go(d), fg, font_size='15sp'))
         outer.add_widget(chips)
         outer.add_widget(Rule(fg, 1))

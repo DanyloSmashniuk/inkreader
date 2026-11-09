@@ -5,7 +5,7 @@
 # InkReader
 
 **Читалка EPUB і FB2 з режимом «електронні чорнила».**
-Без реклами, акаунта та інтернету. Linux і Android.
+Без реклами, акаунта та інтернету. Linux, Windows і Android.
 
 [Завантажити](https://github.com/DanyloSmashniuk/inkreader/releases/latest) · [Сайт](https://DanyloSmashniuk.github.io/inkreader/)
 
@@ -40,6 +40,8 @@ cd InkReader-linux && ./install.sh
 
 Скрипт поставить програму в `~/.local/share/InkReader` і додасть ярлик у меню. Також можна просто запустити `InkReader/InkReader` без встановлення. Книги відкриваються й через «Відкрити за допомогою» у файловому менеджері.
 
+**Windows** (10/11, x64): розпакуйте `InkReader-windows.zip` і запустіть `InkReader.exe`. Установлення не потрібне. Windows може застерегти про невідомого видавця, бо програма не підписана: натисніть «Докладніше» → «Все одно виконати».
+
 ## Клавіші (комп'ютер)
 
 | Дія | Клавіші |
@@ -60,7 +62,7 @@ pip install -r requirements.txt
 ./scripts/run.sh                 # або ./scripts/run.sh книга.epub
 ```
 
-Дані (книги, обкладинки, стан) зберігаються в `~/.config/inkreader/`.
+Дані (книги, обкладинки, стан) зберігаються в `~/.config/inkreader/` на Linux і в `%APPDATA%\inkreader\` на Windows.
 
 ## Збірка
 
@@ -70,6 +72,8 @@ pip install -r requirements.txt
 ./scripts/build_linux.sh         # dist/InkReader/InkReader
 ./scripts/package_linux.sh       # dist/InkReader-linux.tar.xz
 ```
+
+**Windows** (PyInstaller) збирається автоматично на GitHub Actions (`.github/workflows/windows.yml`) і потрапляє в реліз як `InkReader-windows.zip`. Локально на Windows те саме робить `scripts\build_windows.ps1`.
 
 **Android** (buildozer, потрібні Linux та JDK 17):
 
