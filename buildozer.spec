@@ -14,6 +14,8 @@ orientation = portrait
 fullscreen = 0
 
 android.permissions = READ_EXTERNAL_STORAGE
+android.manifest.intent_filters = assets/intent_filters.xml
+android.manifest.launch_mode = singleTask
 android.api = 36
 android.ndk = 28c
 android.minapi = 24

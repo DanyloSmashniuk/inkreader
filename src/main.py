@@ -30,7 +30,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.utils import escape_markup, platform
 
-from book_loader import SUPPORTED_EXTS, load_book
+from book_loader import SUPPORTED_EXTS, guess_ext, load_book
 from typeset import Geometry, justify_positions, typeset
 
 DATA_VERSION = 3                      # змінюється, коли міняється верстка/нормалізація
@@ -1011,6 +1011,13 @@ class InkReaderApp(App):
                 request_permissions([Permission.READ_EXTERNAL_STORAGE])
             except Exception:
                 pass
+            try:                                   # книга, відкрита з файлового менеджера
+                from android import activity
+                activity.bind(on_new_intent=lambda it: Clock.schedule_once(
+                    lambda dt: self._handle_intent(it), 0))
+                Clock.schedule_once(lambda dt: self._handle_intent(), 0.5)
+            except Exception:
+                pass
             try:                                   # екран не гасне під час читання
                 from android.runnable import run_on_ui_thread
                 from jnius import autoclass
@@ -1026,6 +1033,69 @@ class InkReaderApp(App):
     def on_pause(self):
         self.save_state()
         return True
+
+    # ---------- «Відкрити за допомогою» на Android
+    def _handle_intent(self, intent=None):
+        try:
+            from jnius import autoclass
+            act = autoclass('org.kivy.android.PythonActivity').mActivity
+            intent = intent or act.getIntent()
+            if intent is None or intent.getAction() != 'android.intent.action.VIEW':
+                return
+            uri = intent.getData()
+            if uri is None:
+                return
+            if uri.getScheme() == 'file':
+                path = uri.getPath()
+                if path and os.path.isfile(path):
+                    try:
+                        open(path, 'rb').close()
+                        self.open_path(path)
+                        return
+                    except OSError:
+                        pass                       # немає прямого доступу — читаємо через систему
+            self._import_uri(uri, act)
+        except Exception as e:
+            self.message('Не вдалося відкрити файл', repr(e))
+
+    def _import_uri(self, uri, act):
+        """content://… → копія в теці застосунку → відкрити (з тим самим прогресом, якщо книга вже є)."""
+        cr = act.getContentResolver()
+        name, size = None, -1
+        try:
+            cur = cr.query(uri, None, None, None, None)
+            if cur is not None:
+                try:
+                    if cur.moveToFirst():
+                        i = cur.getColumnIndex('_display_name')
+                        if i >= 0:
+                            name = cur.getString(i)
+                        j = cur.getColumnIndex('_size')
+                        if j >= 0 and not cur.isNull(j):
+                            size = cur.getLong(j)
+                finally:
+                    cur.close()
+        except Exception:
+            pass
+        name = os.path.basename(name or uri.getLastPathSegment() or 'book').replace(os.sep, '_')
+        key = 'uri:%s:%s' % (name, size)
+        for e in self.library:
+            if e.get('src') == key and os.path.exists(e['path']):
+                self.open_entry(e)
+                return
+        dst = os.path.join(self.books_dir, '%d_%s' % (int(time.time() * 1000), name))
+        pfd = cr.openFileDescriptor(uri, 'r')
+        with os.fdopen(pfd.detachFd(), 'rb') as f, open(dst, 'wb') as out:
+            shutil.copyfileobj(f, out, 1 << 20)
+        if not dst.lower().endswith(SUPPORTED_EXTS):
+            ext = guess_ext(dst)
+            if not ext:
+                os.remove(dst)
+                self.message('Не вдалося відкрити книгу', 'Підтримуються лише EPUB та FB2')
+                return
+            os.rename(dst, dst + ext)
+            dst += ext
+        self.add_book(dst, copied=True, key=key)
 
     def on_stop(self):
         self.save_state()
@@ -1091,14 +1161,41 @@ class InkReaderApp(App):
     def pick_file(self):
         if platform == 'android':
             try:
-                from plyer import filechooser
-                filechooser.open_file(
-                    on_selection=lambda sel: Clock.schedule_once(lambda dt: self._picked(sel), 0),
-                    filters=[['Книги', '*.epub', '*.fb2', '*.zip']], multiple=False)
+                self._android_pick()
                 return
             except Exception:
                 pass
         self.browse_books()
+
+    PICK_CODE = 7311
+
+    def _android_pick(self):
+        """Системний вибір файлу (Google Files, Xiaomi…): відповідь — content://, її читаємо через систему."""
+        from android import activity
+        from jnius import autoclass
+        Intent = autoclass('android.content.Intent')
+        act = autoclass('org.kivy.android.PythonActivity').mActivity
+        if not getattr(self, '_pick_bound', False):
+            activity.bind(on_activity_result=self._on_activity_result)
+            self._pick_bound = True
+        it = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        it.addCategory(Intent.CATEGORY_OPENABLE)
+        it.setType('*/*')
+        act.startActivityForResult(it, self.PICK_CODE)
+
+    def _on_activity_result(self, request, result, intent):
+        if request != self.PICK_CODE or result != -1 or intent is None:
+            return
+        uri = intent.getData()
+        if uri is not None:
+            Clock.schedule_once(lambda dt: self._open_uri(uri), 0)
+
+    def _open_uri(self, uri):
+        try:
+            from jnius import autoclass
+            self._import_uri(uri, autoclass('org.kivy.android.PythonActivity').mActivity)
+        except Exception as e:
+            self.message('Не вдалося відкрити файл', repr(e))
 
     def browse_books(self):
         """Власний вибір книги: кроки по теках, швидкі місця, тап по книзі відкриває її."""
@@ -1208,7 +1305,7 @@ class InkReaderApp(App):
         popup.open()
 
     def _picked(self, selection):
-        if selection:
+        if selection and selection[0]:
             self.add_book(selection[0])
 
     def open_path(self, src):
@@ -1219,17 +1316,21 @@ class InkReaderApp(App):
                 return
         self.add_book(src)
 
-    def add_book(self, src):
-        dst = os.path.join(self.books_dir, '%d_%s' % (int(time.time() * 1000),
-                                                      os.path.basename(src)))
-        try:
-            shutil.copy2(src, dst)
-        except Exception:
+    def add_book(self, src, copied=False, key=None):
+        """copied=True: src уже лежить у теці застосунку (імпорт з content://), key — ідентифікатор для «src»."""
+        if copied:
             dst = src
+        else:
+            dst = os.path.join(self.books_dir, '%d_%s' % (int(time.time() * 1000),
+                                                          os.path.basename(src)))
+            try:
+                shutil.copy2(src, dst)
+            except Exception:
+                dst = src
         try:
             book = load_book(dst, self.cache_dir(dst))
         except Exception as e:
-            if dst != src:
+            if copied or dst != src:
                 try:
                     os.remove(dst)
                 except OSError:
@@ -1238,7 +1339,7 @@ class InkReaderApp(App):
             return
         entry = {'path': dst, 'title': book.title, 'author': book.author,
                  'cover': book.cover, 'block': 0, 'off': 0, 'pct': 0,
-                 't': time.time(), 'v': DATA_VERSION, 'src': os.path.abspath(src)}
+                 't': time.time(), 'v': DATA_VERSION, 'src': key or os.path.abspath(src)}
         self.library.insert(0, entry)
         self.save_state()
         self.open_entry(entry, book)

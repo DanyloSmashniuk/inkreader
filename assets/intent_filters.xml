@@ -1,0 +1,35 @@
+<!-- «Відкрити за допомогою» / тап по книзі у файлових менеджерах (Google Files, Xiaomi, Samsung…) -->
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="content" />
+    <data android:scheme="file" />
+    <data android:mimeType="application/epub+zip" />
+    <data android:mimeType="application/x-fictionbook+xml" />
+    <data android:mimeType="application/x-fictionbook" />
+    <data android:mimeType="application/fb2" />
+    <data android:mimeType="application/x-fb2" />
+    <data android:mimeType="application/fb2+zip" />
+    <data android:mimeType="application/x-zip-compressed" />
+    <data android:mimeType="application/zip" />
+    <data android:mimeType="application/octet-stream" />
+</intent-filter>
+<!-- те саме за розширенням, коли файловий менеджер не вказує тип -->
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="content" />
+    <data android:scheme="file" />
+    <data android:host="*" />
+    <data android:mimeType="*/*" />
+    <data android:pathPattern=".*\\.epub" />
+    <data android:pathPattern=".*\\..*\\.epub" />
+    <data android:pathPattern=".*\\..*\\..*\\.epub" />
+    <data android:pathPattern=".*\\.fb2" />
+    <data android:pathPattern=".*\\..*\\.fb2" />
+    <data android:pathPattern=".*\\..*\\..*\\.fb2" />
+    <data android:pathPattern=".*\\.fb2\\.zip" />
+    <data android:pathPattern=".*\\..*\\.fb2\\.zip" />
+</intent-filter>

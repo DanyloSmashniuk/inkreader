@@ -535,6 +535,22 @@ def _parse_fb2_zip(path, img_dir=None):
 
 # ----------------------------------------------------------------- API
 
+def guess_ext(path):
+    """Розширення за вмістом файлу: '.epub', '.fb2', '.zip' або '' (не книга)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4096)
+        if head[:2] == b'PK':
+            with zipfile.ZipFile(path) as z:
+                names = [n.lower() for n in z.namelist()]
+            if 'meta-inf/container.xml' in names:
+                return '.epub'
+            return '.zip' if any(n.endswith('.fb2') for n in names) else ''
+        return '.fb2' if b'<FictionBook' in head else ''
+    except Exception:
+        return ''
+
+
 def load_book(path, img_dir=None):
     low = path.lower()
     if low.endswith('.epub'):
