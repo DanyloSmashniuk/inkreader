@@ -18,7 +18,7 @@ from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel, LabelBase
 from kivy.core.window import Window
 from kivy.effects.scroll import ScrollEffect
-from kivy.graphics import Color, Rectangle, RenderContext
+from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, RenderContext, Translate
 from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -324,6 +324,11 @@ class Faces:
 # ------------------------------------------------------------------ бібліотека
 
 class LibraryScreen(Screen):
+    def set_insets(self, l, t, r, b):
+        """Відступи під системні панелі Android: padding всередині екрана (сам екран не зсуваємо:
+        у зсунутому RelativeLayout Kivy віддає кнопкам «відпускання» у координатах вікна.)"""
+        self.root_box.padding = (l, t, r, b)       # BoxLayout.padding: left, TOP, right, BOTTOM
+
     def __init__(self, app, **kw):
         super().__init__(**kw)
         self.app = app
@@ -398,6 +403,21 @@ class LibraryScreen(Screen):
 
 class ReaderScreen(Screen):
     FOOTER_H = dp(34)
+    inset = (0, 0, 0, 0)          # l, t, r, b — системні панелі Android
+
+    def set_insets(self, l, t, r, b):
+        self.inset = (l, t, r, b)
+        self._place_bars()
+        self._on_resize()
+
+    def _place_bars(self, *_):
+        """Верхня і нижня панелі меню лежать у межах безпечної зони."""
+        l, t, r, b = self.inset
+        w, h = max(1, self.width), max(1, self.height)
+        for bar, hint in ((self.top_bar, {'x': l / w, 'top': 1 - t / h}),
+                          (self.bottom_bar, {'x': l / w, 'y': b / h})):
+            bar.size_hint_x = max(0.1, (w - l - r) / w)
+            bar.pos_hint = hint
 
     def __init__(self, app, **kw):
         super().__init__(**kw)
@@ -436,6 +456,8 @@ class ReaderScreen(Screen):
 
         self._build_menu()
         self.bind(size=self._on_resize)
+        self.bind(size=self._place_bars)
+        self._place_bars()
 
     # ---------- меню
     def _build_menu(self):
@@ -572,7 +594,8 @@ class ReaderScreen(Screen):
         if not self.book or self.width < 60 or self.height < 60:
             return
         p = self.app.prefs
-        W, H = self.width, self.height
+        il, it, ir, ib = self.inset
+        W, H = self.width - il - ir, self.height - it - ib      # безпечна зона
         fam = SERIF if (p['font'] == 'serif' and SERIF) else 'Roboto'
         key = (fam, p['font_size'], p['bold'])
         if self.faces is None or self._pagination_key != key:
@@ -606,11 +629,11 @@ class ReaderScreen(Screen):
                             faces.space[False], faces.space[True], p['hyph'])
         self.foot_l.size = (total * 0.66, dp(24))
         self.foot_l.text_size = self.foot_l.size
-        self.foot_l.pos = (x0, dp(3))
+        self.foot_l.pos = (il + x0, ib + dp(3))
         self.foot_r.size = (total * 0.34, dp(24))
         self.foot_r.text_size = self.foot_r.size
-        self.foot_r.pos = (x0 + total - self.foot_r.width, dp(3))
-        self.page.pos, self.page.size = (0, 0), (W, H)
+        self.foot_r.pos = (il + x0 + total - self.foot_r.width, ib + dp(3))
+        self.page.pos, self.page.size = (il, ib), (W, H)
 
         pages, pos = typeset(self.book.blocks, set(self.chap_blocks),
                              self.book.img_sizes, self.geo, faces.width)
@@ -636,7 +659,10 @@ class ReaderScreen(Screen):
         only_img = len(items) == 1 and items[0][2][0] == 'i'
         lh = g.lh
         pics = []
+        il, it_, ir, ib = self.inset
         with pv.canvas:
+            PushMatrix()
+            Translate(il, ib)           # сторінка малюється в безпечній зоні
             Color(*fg)
             for col, row, it in items:
                 x_col = self.col_x[col]
@@ -685,8 +711,9 @@ class ReaderScreen(Screen):
             Rectangle(pos=(x0, yb), size=(tw, 1))
             Color(*fg)
             Rectangle(pos=(x0, yb - th / 2), size=(tw * frac, th))
+            PopMatrix()
         for path, x, y, w, h in pics:
-            pv.add_widget(Pic(path, gray=gray, pos=(round(x), round(y)), size=(w, h),
+            pv.add_widget(Pic(path, gray=gray, pos=(round(x + il), round(y + ib)), size=(w, h),
                               size_hint=(None, None)))
 
         n = len(self.pages)
@@ -936,7 +963,43 @@ class InkReaderApp(App):
         self.sm.add_widget(self.reader)
         Window.bind(on_keyboard=self._on_key)
         self.show_library()
+        # Android 15+/target API 35+: вікно малюється під рядком стану і панеллю навігації,
+        # тому екрани самі відступають від них (див. set_insets)
+        if platform == 'android':
+            Window.bind(size=lambda *a: Clock.schedule_once(self._apply_insets, 0.1))
+            Clock.schedule_interval(self._apply_insets, 1.0)   # панелі можуть з'явитись/змінитись пізніше
         return self.sm
+
+    def _system_insets(self):
+        """(left, top, right, bottom) у пікселях: рядок стану, навігація, виріз екрана."""
+        from jnius import autoclass
+        act = autoclass('org.kivy.android.PythonActivity').mActivity
+        ins = act.getWindow().getDecorView().getRootWindowInsets()
+        if ins is None:
+            return None
+        Build = autoclass('android.os.Build$VERSION')
+        if Build.SDK_INT >= 30:
+            Type = autoclass('android.view.WindowInsets$Type')
+            i = ins.getInsets(Type.systemBars() | Type.displayCutout())
+            return i.left, i.top, i.right, i.bottom
+        return (ins.getSystemWindowInsetLeft(), ins.getSystemWindowInsetTop(),
+                ins.getSystemWindowInsetRight(), ins.getSystemWindowInsetBottom())
+
+    def _apply_insets(self, *_):
+        try:
+            v = self._system_insets()
+        except Exception:
+            return
+        if v is None:
+            return
+        l, t, r, b = v
+        if b:
+            b += dp(10)                         # невеликий запас: підвал не торкається панелі навігації
+        ins = (l, t, r, b)
+        if ins != getattr(self, '_insets', None):
+            self._insets = ins
+            for scr in (self.library_screen, self.reader):
+                scr.set_insets(*ins)
 
     def on_start(self):
         files = [a for a in sys.argv[1:] if a.lower().endswith(SUPPORTED_EXTS) and os.path.isfile(a)]

@@ -75,14 +75,14 @@ pip install -r requirements.txt
 
 **Windows** (PyInstaller) збирається автоматично на GitHub Actions (`.github/workflows/windows.yml`) і потрапляє в реліз як інсталятор `InkReader-setup.exe` (Inno Setup, `scripts/installer.iss`). Локально на Windows те саме робить `scripts\build_windows.ps1` (для інсталятора потрібен Inno Setup 6).
 
-**Android** (buildozer, потрібні Linux та JDK 17):
+**Android** (buildozer, потрібні Linux, JDK 17 і Python 3.11 у venv). Збірка націлена на API 36 і NDK 28c, тобто відповідає вимогам Google Play (target API 36, вирівнювання 16 КБ):
 
 ```bash
-pip install buildozer
-buildozer android debug          # bin/*.apk
+python3.11 -m venv ~/build311
+./scripts/build_android.sh       # ~/inkreader-apk/bin/*.apk
 ```
 
-Збирайте з теки, шлях до якої містить лише латиницю: інакше Java може не знайти файли. Налаштування лежать у [`buildozer.spec`](buildozer.spec).
+Скрипт збирає в окремій теці, застосовує невеликий патч до python-for-android (обхід помилки встановлення android-коліс) і перевіряє вирівнювання бібліотек. Шлях до робочої теки має містити лише латиницю: інакше Java може не знайти файли. Налаштування лежать у [`buildozer.spec`](buildozer.spec).
 
 ## Структура
 
