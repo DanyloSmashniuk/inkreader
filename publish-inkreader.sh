@@ -18,6 +18,7 @@ die() { printf '\nПОМИЛКА: %s\n' "$*" >&2; exit 1; }
 # Використання:
 #   ./publish-inkreader.sh --check            лише перевірка, нічого не публікує
 #   ./publish-inkreader.sh [app.apk linux.tar.xz]   публікація (шляхи необовʼязкові)
+#   MSG="Опис змін" ./publish-inkreader.sh ...      власне повідомлення коміту замість «InkReader $VERSION»
 CHECK_ONLY=0
 if [[ "${1:-}" == "--check" ]]; then CHECK_ONLY=1; shift; fi
 APK_INPUT="${1:-}"
@@ -125,7 +126,7 @@ gh repo edit "$REPO" \
 
 git add README.md docs .github src assets scripts tests requirements.txt requirements-dev.txt pyproject.toml buildozer.spec .gitignore LICENSE publish-inkreader.sh
 if ! git diff --cached --quiet; then
-  git commit -m "InkReader $VERSION"
+  git commit -m "${MSG:-InkReader $VERSION}"
 else
   say "Змін у Git немає — новий commit не потрібен"
 fi

@@ -13,6 +13,14 @@
 
 </div>
 
+[![tests](https://github.com/DanyloSmashniuk/inkreader/actions/workflows/ci.yml/badge.svg)](https://github.com/DanyloSmashniuk/inkreader/actions/workflows/ci.yml)
+
+## In English
+
+- **InkReader** is a free, offline e-book reader for EPUB and FB2 with an e-ink mode (paper colours, periodic full refresh) for **Linux, Windows and Android**. Screenshots are above; builds are in the [latest release](https://github.com/DanyloSmashniuk/inkreader/releases/latest).
+- **Stack:** Python 3.11+, Kivy 2.3. Packaged with PyInstaller (Linux), buildozer / python-for-android (Android, target API 36, 16 KB page aligned) and Inno Setup (Windows); builds and releases run on GitHub Actions.
+- **Under the hood:** own EPUB/FB2 parsers, text cleanup, justified typesetting with Ukrainian and English hyphenation and widow/orphan control, no third-party parsing libraries. Tested with pytest; ruff and mypy run in CI.
+
 ## Можливості
 
 - **E-ink режим.** Чорний текст на кольорі паперу, без градієнтів і блиску. Підсилені сірі кольори, повне оновлення екрана кожні 1, 3, 6, 10 або 20 сторінок. Є й звичайний кольоровий режим, світла та темна теми.
@@ -106,12 +114,16 @@ assets/            іконки та знімки екрана
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+pytest --cov          # тести й покриття (інтерфейс Kivy в main.py не входить)
+ruff check src tests  # лінтер
+mypy                  # типи для book_loader, typeset, textfix, hyph
 ```
+
+Те саме запускається в CI на кожен push і pull request.
 
 ## Сайт
 
-Папка `docs/` публікується через GitHub Pages (Settings → Pages → Deploy from a branch → `main` → `/docs`). Кнопка «Завантажити» на сайті сама визначає систему й бере файл з останнього релізу, тож у релізі файли мають називатись `InkReader.apk` і `InkReader-linux.tar.xz`. Свій логін вказується в рядку `REPO` у `docs/index.html`.
+Папка `docs/` публікується через GitHub Pages (Settings → Pages → Deploy from a branch → `main` → `/docs`). Кнопка «Завантажити» на сайті сама визначає систему й бере файл з останнього релізу, тож у релізі файли мають називатись `InkReader.apk` і `InkReader-linux.tar.xz`.
 
 ## Ліцензія
 
