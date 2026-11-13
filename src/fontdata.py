@@ -5185,5 +5185,5 @@ def install(dst_dir):
                     f.write(zlib.decompress(base64.b85decode(data)))
             out.append(path)
         return tuple(out)
-    except Exception:
+    except (OSError, ValueError, zlib.error):
         return None

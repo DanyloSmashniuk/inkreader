@@ -18,10 +18,10 @@ MIN_RIGHT = 3
 try:                                   # необов'язково
     import pyphen
     _PYPHEN = pyphen.Pyphen(lang='en_US')
-except Exception:
+except (ImportError, KeyError):
     _PYPHEN = None
 
-_cache = {}
+_cache: dict[str, list[int]] = {}
 
 
 def _cyr_points(w):

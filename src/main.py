@@ -4,6 +4,7 @@
 переноси слів — hyph.py. Тут: інтерфейс, малювання сторінки, налаштування.
 """
 import json
+import logging
 import os
 import shutil
 import sys
@@ -15,7 +16,8 @@ os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', 'InkReader')   # збігаєть
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
-from kivy.core.text import Label as CoreLabel, LabelBase
+from kivy.core.text import Label as CoreLabel
+from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.effects.scroll import ScrollEffect
 from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, RenderContext, Translate
@@ -32,6 +34,8 @@ from kivy.utils import escape_markup, platform
 
 from book_loader import SUPPORTED_EXTS, guess_ext, load_book
 from typeset import Geometry, justify_positions, typeset
+
+log = logging.getLogger('inkreader')
 
 DATA_VERSION = 3                      # змінюється, коли міняється верстка/нормалізація
 
@@ -57,7 +61,8 @@ def setup_fonts(user_dir):
         if paths:
             LabelBase.register(name='Serif', fn_regular=paths[0], fn_bold=paths[1])
             SERIF = 'Serif'
-    except Exception:
+    except (ImportError, OSError, ValueError, IndexError) as e:
+        log.warning('вбудований шрифт недоступний: %s', e)
         SERIF = None
 
 
@@ -255,12 +260,14 @@ class Pic(Widget):
                 if ctx.shader.success:
                     self.canvas = ctx
                     gray_ok = True
-            except Exception:
+            except Exception as e:  # noqa: BLE001 — помилки GL/шейдера в Kivy не мають спільного типу
+                log.warning('шейдер відтінків сірого недоступний: %s', e)
                 gray_ok = False
         super().__init__(**kw)
         try:
             self._tex = CoreImage(source).texture
-        except Exception:
+        except Exception as e:  # noqa: BLE001 — декодери зображень Kivy кидають різні типи
+            log.warning('не вдалося завантажити зображення %s: %s', source, e)
             self._tex = None
         with self.canvas:
             Color(1, 1, 1, 1)
@@ -988,7 +995,8 @@ class InkReaderApp(App):
     def _apply_insets(self, *_):
         try:
             v = self._system_insets()
-        except Exception:
+        except Exception as e:  # noqa: BLE001 — jnius кидає різні Java-винятки
+            log.debug('відступи системних панелей недоступні: %s', e)
             return
         if v is None:
             return
@@ -1009,15 +1017,15 @@ class InkReaderApp(App):
             try:
                 from android.permissions import Permission, request_permissions
                 request_permissions([Permission.READ_EXTERNAL_STORAGE])
-            except Exception:
-                pass
+            except (ImportError, AttributeError) as e:
+                log.warning('запит дозволу на читання не виконано: %s', e)
             try:                                   # книга, відкрита з файлового менеджера
                 from android import activity
                 activity.bind(on_new_intent=lambda it: Clock.schedule_once(
                     lambda dt: self._handle_intent(it), 0))
                 Clock.schedule_once(lambda dt: self._handle_intent(), 0.5)
-            except Exception:
-                pass
+            except ImportError as e:
+                log.warning('відкриття з файлового менеджера недоступне: %s', e)
             try:                                   # екран не гасне під час читання
                 from android.runnable import run_on_ui_thread
                 from jnius import autoclass
@@ -1027,8 +1035,8 @@ class InkReaderApp(App):
                     act = autoclass('org.kivy.android.PythonActivity').mActivity
                     act.getWindow().addFlags(128)
                 keep_on()
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — jnius кидає різні Java-винятки
+                log.warning('не вдалося залишити екран увімкненим: %s', e)
 
     def on_pause(self):
         self.save_state()
@@ -1055,7 +1063,8 @@ class InkReaderApp(App):
                     except OSError:
                         pass                       # немає прямого доступу — читаємо через систему
             self._import_uri(uri, act)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — межа інтерфейсу: показуємо помилку, а не падаємо
+            log.exception('не вдалося обробити intent')
             self.message('Не вдалося відкрити файл', repr(e))
 
     def _import_uri(self, uri, act):
@@ -1075,8 +1084,8 @@ class InkReaderApp(App):
                             size = cur.getLong(j)
                 finally:
                     cur.close()
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 — ім'я й розмір необов'язкові, jnius кидає різні винятки
+            log.debug("не вдалося прочитати ім'я та розмір файлу: %s", e)
         name = os.path.basename(name or uri.getLastPathSegment() or 'book').replace(os.sep, '_')
         key = 'uri:%s:%s' % (name, size)
         for e in self.library:
@@ -1107,8 +1116,10 @@ class InkReaderApp(App):
                 data = json.load(f)
             self.prefs.update(data.get('prefs', {}))
             self.library = [e for e in data.get('library', []) if os.path.exists(e['path'])]
-        except Exception:
-            pass
+        except FileNotFoundError:
+            pass                                       # перший запуск
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            log.warning('стан не прочитано, починаємо з нуля: %s', e)
         if self.prefs.get('theme') in ('paper', 'eink', 'night'):    # старі версії
             self.prefs['theme'] = 'dark' if self.prefs['theme'] == 'night' else 'light'
             self.prefs['eink'] = True
@@ -1120,8 +1131,8 @@ class InkReaderApp(App):
         try:
             with open(self.state_path, 'w', encoding='utf-8') as f:
                 json.dump({'prefs': self.prefs, 'library': self.library}, f, ensure_ascii=False)
-        except Exception:
-            pass
+        except (OSError, TypeError, ValueError) as e:
+            log.warning('стан не збережено: %s', e)
 
     # ---------- вигляд
     def restyle(self):
@@ -1163,8 +1174,8 @@ class InkReaderApp(App):
             try:
                 self._android_pick()
                 return
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — jnius кидає різні Java-винятки; є запасний вибір
+                log.warning('системний вибір файлу недоступний: %s', e)
         self.browse_books()
 
     PICK_CODE = 7311
@@ -1194,7 +1205,8 @@ class InkReaderApp(App):
         try:
             from jnius import autoclass
             self._import_uri(uri, autoclass('org.kivy.android.PythonActivity').mActivity)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — межа інтерфейсу: показуємо помилку, а не падаємо
+            log.exception('не вдалося відкрити вибраний файл')
             self.message('Не вдалося відкрити файл', repr(e))
 
     def browse_books(self):
@@ -1325,11 +1337,13 @@ class InkReaderApp(App):
                                                           os.path.basename(src)))
             try:
                 shutil.copy2(src, dst)
-            except Exception:
+            except OSError as e:
+                log.warning('не вдалося скопіювати книгу, читаємо на місці: %s', e)
                 dst = src
         try:
             book = load_book(dst, self.cache_dir(dst))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — межа інтерфейсу: формат файлу довільний, показуємо причину
+            log.warning('не вдалося відкрити книгу %s: %s', dst, e)
             if copied or dst != src:
                 try:
                     os.remove(dst)
@@ -1347,7 +1361,8 @@ class InkReaderApp(App):
     def open_entry(self, entry, book=None):
         try:
             book = book or load_book(entry['path'], self.cache_dir(entry['path']))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — межа інтерфейсу: формат файлу довільний, показуємо причину
+            log.warning('не вдалося відкрити книгу %s: %s', entry['path'], e)
             self.message('Не вдалося відкрити книгу', str(e))
             return
         if entry.get('v') != DATA_VERSION:      # нормалізація змінила нумерацію блоків

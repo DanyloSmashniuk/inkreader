@@ -10,6 +10,7 @@ load_book(path, img_dir=None) -> Book:
 """
 import base64
 import hashlib
+import logging
 import os
 import posixpath
 import re
@@ -20,6 +21,8 @@ from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
 from textfix import normalize, remap_chapters
+
+log = logging.getLogger(__name__)
 
 SUPPORTED_EXTS = ('.epub', '.fb2', '.zip')
 
@@ -88,7 +91,7 @@ def _image_info(data):
                 return None
         else:
             return None
-    except Exception:
+    except (struct.error, IndexError, ValueError):     # обірваний або пошкоджений заголовок
         return None
     if w <= 0 or h <= 0:
         return None
@@ -214,8 +217,8 @@ def _zip_read(z, names, base, href):
     if full in names:
         try:
             return full, z.read(full)
-        except Exception:
-            pass
+        except (KeyError, OSError, RuntimeError, zipfile.BadZipFile) as e:
+            log.warning('не вдалося прочитати %s з архіву: %s', full, e)
     return full, None
 
 
@@ -235,7 +238,7 @@ def _epub_toc(z, names, base, opf, manifest, file_start, anchors):
         if raw:
             try:
                 root = ET.fromstring(raw)
-            except Exception:
+            except ET.ParseError:
                 root = None
             if root is not None:
                 for n in root.iter():
@@ -252,7 +255,7 @@ def _epub_toc(z, names, base, opf, manifest, file_start, anchors):
         if raw:
             try:
                 root = ET.fromstring(raw)
-            except Exception:
+            except ET.ParseError:
                 root = None
             if root is not None:
                 for p in root.iter():
@@ -290,7 +293,7 @@ def _epub_pagelist(z, names, base, manifest, file_start, anchors):
             return None, ''
         try:
             return ET.fromstring(raw), posixpath.dirname(full)
-        except Exception:
+        except ET.ParseError:
             return None, ''
 
     if nav:
@@ -378,8 +381,8 @@ def _parse_epub(path, img_dir=None):
         try:
             parser.feed(raw.decode('utf-8', errors='replace'))
             parser.close()
-        except Exception:
-            pass
+        except (ValueError, AssertionError) as e:          # зламана розмітка: беремо, що встигло розібратись
+            log.warning('помилка розбору %s: %s', full, e)
         hbase = posixpath.dirname(full)
         blocks = []
         idxmap = []
@@ -455,7 +458,7 @@ def _parse_fb2_bytes(data, img_dir=None):
             return ''
         try:
             raw = base64.b64decode(b.text)
-        except Exception:
+        except ValueError:                                  # binascii.Error — підклас ValueError
             return ''
         return _store_image(book, img_dir, 'fb2:' + href, raw, min_side)
 
@@ -547,7 +550,7 @@ def guess_ext(path):
                 return '.epub'
             return '.zip' if any(n.endswith('.fb2') for n in names) else ''
         return '.fb2' if b'<FictionBook' in head else ''
-    except Exception:
+    except (OSError, zipfile.BadZipFile):
         return ''
 
 
