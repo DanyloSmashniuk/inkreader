@@ -8,6 +8,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest pyflakes pyphen
-      - run: pyflakes src
-      - run: pytest -q
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Лінтер
+        run: ruff check src tests
+      - name: Типи (book_loader, typeset, textfix, hyph)
+        run: mypy
+      - name: Тести та покриття
+        run: pytest -q --cov --cov-report=term-missing

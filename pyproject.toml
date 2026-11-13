@@ -1,3 +1,27 @@
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["src/fontdata.py"]          # згенерований файл зі шрифтом
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE001"]
+ignore = [
+    "E741",   # l/t/r/b у геометрії — усталені позначення
+    "B905",   # zip без strict — довжини свідомо однакові
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/main.py", "src/fontdata.py"]     # інтерфейс Kivy перевіряється вручну на пристроях
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+
+[tool.mypy]
+ignore_missing_imports = true
+files = ["src/book_loader.py", "src/typeset.py", "src/textfix.py", "src/hyph.py"]
