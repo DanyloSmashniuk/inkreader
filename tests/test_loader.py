@@ -1,7 +1,7 @@
 import pytest
+from conftest import CHAPTERS
 
 from book_loader import load_book
-from conftest import CHAPTERS
 
 
 def test_fb2_metadata_and_chapters(fb2_path):
