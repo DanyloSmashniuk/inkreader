@@ -11,3 +11,5 @@ bin/
 .coverage
 .mypy_cache/
 .ruff_cache/
+*.spec
+*.spec
