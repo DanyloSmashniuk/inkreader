@@ -17,7 +17,6 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
-from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.effects.scroll import ScrollEffect
 from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, RenderContext, Translate
@@ -32,48 +31,12 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.utils import escape_markup, platform
 
+import fonts
 from book_loader import SUPPORTED_EXTS, guess_ext, load_book
+from config import DATA_VERSION, DEFAULT_PREFS, FLASH_CYCLE, MARGIN_NAMES, MARGINS, SPACINGS, VIEWS, palette
 from typeset import Geometry, justify_positions, typeset
 
 log = logging.getLogger('inkreader')
-
-DATA_VERSION = 3                      # змінюється, коли міняється верстка/нормалізація
-
-# ----------------------------------------------------------------- налаштування
-
-DEFAULT_PREFS = {'font_size': 20, 'theme': 'light', 'eink': True, 'font': 'serif',
-                 'flash_every': 6, 'spacing': 1.3, 'margin': 1,
-                 'justify': True, 'hyph': True, 'bold': False, 'book_pages': True}
-SPACINGS = [1.15, 1.3, 1.45, 1.6]
-MARGINS = [0.03, 0.055, 0.085]
-MARGIN_NAMES = ['вузькі', 'середні', 'широкі']
-FLASH_CYCLE = [0, 1, 3, 6, 10, 20]
-VIEWS = [(True, 'light'), (True, 'dark'), (False, 'light'), (False, 'dark')]
-
-SERIF = None                           # ім'я вбудованого шрифту з засічками
-
-
-def setup_fonts(user_dir):
-    global SERIF
-    try:
-        import fontdata
-        paths = fontdata.install(os.path.join(user_dir, 'fonts'))
-        if paths:
-            LabelBase.register(name='Serif', fn_regular=paths[0], fn_bold=paths[1])
-            SERIF = 'Serif'
-    except (ImportError, OSError, ValueError, IndexError) as e:
-        log.warning('вбудований шрифт недоступний: %s', e)
-        SERIF = None
-
-
-def palette(prefs):
-    dark = prefs['theme'] == 'dark'
-    if prefs['eink']:      # чисто чорне на «папері» e-ink (або навпаки)
-        return ((0, 0, 0, 1), (0.93, 0.93, 0.93, 1)) if dark else \
-               ((0.90, 0.90, 0.88, 1), (0, 0, 0, 1))
-    return ((0.07, 0.07, 0.08, 1), (0.82, 0.82, 0.80, 1)) if dark else \
-           ((0.965, 0.95, 0.915, 1), (0.13, 0.12, 0.11, 1))
-
 
 # --------------------------------------------------------------------- віджети
 
@@ -531,7 +494,7 @@ class ReaderScreen(Screen):
         b['plus'].text = 'A+\n%d' % (p['font_size'] + 2)
         b['spacing'].text = 'Інтервал\n%.2f' % p['spacing']
         b['margin'].text = 'Поля\n%s' % MARGIN_NAMES[p['margin']]
-        b['font'].text = 'Шрифт\n%s' % ('із засічками' if p['font'] == 'serif' and SERIF
+        b['font'].text = 'Шрифт\n%s' % ('із засічками' if p['font'] == 'serif' and fonts.SERIF
                                         else 'без засічок')
         b['eink'].text = 'Режим\n%s' % ('E-ink' if p['eink'] else 'Колір')
         b['theme'].text = 'Тема\n%s' % ('темна' if p['theme'] == 'dark' else 'світла')
@@ -603,7 +566,7 @@ class ReaderScreen(Screen):
         p = self.app.prefs
         il, it, ir, ib = self.inset
         W, H = self.width - il - ir, self.height - it - ib      # безпечна зона
-        fam = SERIF if (p['font'] == 'serif' and SERIF) else 'Roboto'
+        fam = fonts.SERIF if (p['font'] == 'serif' and fonts.SERIF) else 'Roboto'
         key = (fam, p['font_size'], p['bold'])
         if self.faces is None or self._pagination_key != key:
             self.faces = Faces(fam, sp(p['font_size']), p['bold'])
@@ -813,7 +776,7 @@ class ReaderScreen(Screen):
 
     def toggle_font(self):
         p = self.app.prefs
-        if SERIF:
+        if fonts.SERIF:
             p['font'] = 'sans' if p['font'] == 'serif' else 'serif'
         self._apply(relayout=True)
 
@@ -961,7 +924,7 @@ class InkReaderApp(App):
         self._load_state()
         self.desktop = platform in ('linux', 'win', 'macosx')
         self.prefs.pop('win', None)     # старі версії зберігали розмір вікна — це могло виводити його за екран
-        setup_fonts(self.user_data_dir)
+        fonts.setup_fonts(self.user_data_dir)
 
         self.sm = ScreenManager(transition=NoTransition())   # жодної анімації
         self.library_screen = LibraryScreen(self, name='library')
