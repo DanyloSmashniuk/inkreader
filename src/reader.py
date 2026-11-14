@@ -1,0 +1,320 @@
+"""Екран читання: верстка, малювання сторінки, гортання."""
+import time
+from bisect import bisect_right
+
+from kivy.clock import Clock
+from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Translate
+from kivy.metrics import dp, sp
+from kivy.uix.label import Label
+from kivy.uix.screenmanager import Screen
+from kivy.uix.widget import Widget
+
+import fonts
+from config import MARGINS
+from gestures import GestureMixin
+from reader_menu import MenuMixin
+from reader_settings import SettingsMixin
+from typeset import Geometry, justify_positions, typeset
+from widgets import PAGE_CH, BgFloat, Faces, Pic
+
+
+class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
+    """Екран читання: верстка, малювання сторінки, гортання. Меню, налаштування й жести — у міксинах."""
+    FOOTER_H = dp(34)
+    inset = (0, 0, 0, 0)          # l, t, r, b — системні панелі Android
+
+    def set_insets(self, l, t, r, b):
+        self.inset = (l, t, r, b)
+        self._place_bars()
+        self._on_resize()
+
+    def _place_bars(self, *_):
+        """Верхня і нижня панелі меню лежать у межах безпечної зони."""
+        l, t, r, b = self.inset
+        w, h = max(1, self.width), max(1, self.height)
+        for bar, hint in ((self.top_bar, {'x': l / w, 'top': 1 - t / h}),
+                          (self.bottom_bar, {'x': l / w, 'y': b / h})):
+            bar.size_hint_x = max(0.1, (w - l - r) / w)
+            bar.pos_hint = hint
+
+    def __init__(self, app, **kw):
+        super().__init__(**kw)
+        self.app = app
+        self.book = None
+        self.entry = None
+        self.pages, self.page_pos = [], []
+        self.chap_blocks = []
+        self.idx = 0
+        self.turns = 0
+        self.menu_visible = False
+        self.faces = None
+        self.geo = None
+        self.col_x = [0]
+        self.page_top = 0
+        self._pag_ev = self._save_ev = None
+        self._pagination_key = None
+
+        self.root_f = BgFloat()
+        self.add_widget(self.root_f)
+        self.page = Widget()
+        self.root_f.add_widget(self.page)
+        self.foot_l = Label(font_size=sp(12), halign='left', valign='middle',
+                            size_hint=(None, None))
+        self.foot_r = Label(font_size=sp(12), halign='right', valign='middle',
+                            size_hint=(None, None))
+        self.root_f.add_widget(self.foot_l)
+        self.root_f.add_widget(self.foot_r)
+
+        self._flash = Widget()
+        with self._flash.canvas:
+            self._flash_c = Color(0, 0, 0, 1)
+            self._flash_rect = Rectangle(pos=self._flash.pos, size=self._flash.size)
+        self._flash.bind(pos=lambda w, v: setattr(self._flash_rect, 'pos', v),
+                         size=lambda w, v: setattr(self._flash_rect, 'size', v))
+
+        self._build_menu()
+        self.bind(size=self._on_resize)
+        self.bind(size=self._place_bars)
+        self._place_bars()
+
+    def apply_theme(self):
+        bg, fg = self.app.colors
+        self.root_f.set_bg(bg)
+        for bar in (self.top_bar, self.bottom_bar):
+            bar.set_bg(bg)
+        self.top_rule.set_color(fg)
+        self.bottom_rule.set_color(fg)
+        self.seek.set_color(fg)
+        for w in [self.back_btn, self.title_lbl, self.toc_btn] + list(self.btns.values()):
+            w.color = fg
+        self.foot_l.color = self.foot_r.color = (fg[0], fg[1], fg[2], 0.8)
+        self._flash_c.rgba = (0, 0, 0, 1)
+        self._refresh_menu_labels()
+        if self.pages:
+            self.render()
+
+    # ---------- відкриття
+    def open(self, entry, book):
+        self.entry = entry
+        self.book = book
+        self.pages, self.page_pos = [], []
+        self.chap_blocks = [b for _, b in book.chapters]
+        # «справжні» сторінки: стала довжина (знаків), не залежить від шрифту й екрана
+        self.cum, tot = [], 0
+        for k, t in book.blocks:
+            self.cum.append(tot)
+            tot += len(t) if k in 'hpv' else 0
+        self.real_total = max(1, -(-tot // PAGE_CH))
+        self.pl_blocks = [b for _, b in book.pagelist]
+        self.turns = 0
+        self._pagination_key = None
+        self.show_menu(False)
+        self.apply_theme()
+        self._schedule_paginate(0.05, (entry.get('block', 0), entry.get('off', 0)))
+
+    # ---------- верстка
+    def _on_resize(self, *_):
+        if self.book:
+            self._schedule_paginate(0.25, self.cur_pos())
+
+    def _schedule_paginate(self, delay, pos):
+        if self._pag_ev:
+            self._pag_ev.cancel()
+        self._pag_ev = Clock.schedule_once(lambda dt: self.paginate(pos), delay)
+
+    def cur_pos(self):
+        if self.page_pos:
+            return self.page_pos[self.idx]
+        return (self.entry.get('block', 0), self.entry.get('off', 0)) if self.entry else (0, 0)
+
+    def relayout(self):
+        self.paginate(self.cur_pos())
+
+    def paginate(self, target=None):
+        if not self.book or self.width < 60 or self.height < 60:
+            return
+        p = self.app.prefs
+        il, it, ir, ib = self.inset
+        W, H = self.width - il - ir, self.height - it - ib      # безпечна зона
+        fam = fonts.SERIF if (p['font'] == 'serif' and fonts.SERIF) else 'Roboto'
+        key = (fam, p['font_size'], p['bold'])
+        if self.faces is None or self._pagination_key != key:
+            self.faces = Faces(fam, sp(p['font_size']), p['bold'])
+            self._pagination_key = key
+        faces = self.faces
+
+        # адаптивна геометрія: поля у % від ширини, обмежена довжина рядка, 2 колонки на широких екранах
+        mx = max(dp(10), W * MARGINS[p['margin']])
+        avail_w = W - 2 * mx
+        max_col = faces.fs * 34
+        gutter = max(dp(24), mx)
+        if W > H * 1.2 and avail_w >= faces.fs * 44:
+            n_cols = 2
+            col_w = min(max_col, (avail_w - gutter) / 2)
+        else:
+            n_cols = 1
+            col_w = min(max_col, avail_w)
+        total = n_cols * col_w + (n_cols - 1) * gutter
+        x0 = (W - total) / 2
+        self.col_x = [x0 + i * (col_w + gutter) for i in range(n_cols)]
+
+        base_lh = faces.line_height() * p['spacing']
+        top_pad = max(dp(14), H * 0.02)
+        avail_h = H - top_pad - self.FOOTER_H
+        rows = max(3, int(avail_h // base_lh))
+        lh = min(avail_h / rows, base_lh * 1.18)       # однакова сітка рядків на кожній сторінці
+        self.page_top = H - top_pad - (avail_h - rows * lh) / 2
+
+        self.geo = Geometry(col_w, n_cols, rows, lh, faces.fs * 1.4,
+                            faces.space[False], faces.space[True], p['hyph'])
+        self.foot_l.size = (total * 0.66, dp(24))
+        self.foot_l.text_size = self.foot_l.size
+        self.foot_l.pos = (il + x0, ib + dp(3))
+        self.foot_r.size = (total * 0.34, dp(24))
+        self.foot_r.text_size = self.foot_r.size
+        self.foot_r.pos = (il + x0 + total - self.foot_r.width, ib + dp(3))
+        self.page.pos, self.page.size = (il, ib), (W, H)
+
+        pages, pos = typeset(self.book.blocks, set(self.chap_blocks),
+                             self.book.img_sizes, self.geo, faces.width)
+        self.pages, self.page_pos = pages, pos
+        target = tuple(target or (0, 0))
+        self.idx = max(0, bisect_right(self.page_pos, target) - 1)
+        self.apply_theme()
+        self.render()
+
+    # ---------- малювання сторінки
+    def render(self):
+        if not self.pages or not self.geo:
+            return
+        g, faces = self.geo, self.faces
+        fg = self.app.colors[1]
+        gray = self.app.prefs['eink']
+        justify = self.app.prefs['justify']
+        blocks = self.book.blocks
+        pv = self.page
+        pv.canvas.clear()
+        pv.clear_widgets()
+        items = self.pages[self.idx]
+        only_img = len(items) == 1 and items[0][2][0] == 'i'
+        lh = g.lh
+        pics = []
+        il, it_, ir, ib = self.inset
+        with pv.canvas:
+            PushMatrix()
+            Translate(il, ib)           # сторінка малюється в безпечній зоні
+            Color(*fg)
+            for col, row, it in items:
+                x_col = self.col_x[col]
+                y_top = self.page_top - row * lh
+                if it[0] == 'i':
+                    _, _bi, path, w, h, _r = it
+                    if only_img:
+                        y_top = self.page_top - (g.rows * lh - h) / 2
+                    pics.append((path, x_col + (g.col_w - w) / 2, y_top - h, w, h))
+                    continue
+                _, bi, s, e, style, flag = it
+                heading = style == 'h'
+                if style == 's':
+                    words = ['* * *']
+                else:
+                    words = blocks[bi][1][s:e].split()
+                    if flag & 1 and words:
+                        words[-1] += '-'
+                if not words:
+                    continue
+                widths = [faces.width(wd, heading) for wd in words]
+                space = faces.space[heading]
+                if heading or style == 's':
+                    line_w = sum(widths) + space * (len(words) - 1)
+                    xs = [(g.col_w - line_w) / 2 + sum(widths[:i]) + space * i
+                          for i in range(len(words))]
+                    x_start = x_col
+                else:
+                    indent = g.indent if style == 'p0' else 0
+                    x_start = x_col + indent
+                    if justify and style in ('p0', 'p') and not flag & 2:
+                        xs = justify_positions(words, widths, g.col_w - indent, space)
+                    else:
+                        xs = [sum(widths[:i]) + space * i for i in range(len(words))]
+                for wd, x in zip(words, xs):
+                    tex = faces.texture(wd, heading)
+                    y = y_top - lh / 2 - tex.height / 2
+                    Rectangle(texture=tex, pos=(round(x_start + x), round(y)), size=tex.size)
+            # прогрес читання: тонка лінія над підвалом
+            n = len(self.pages)
+            frac = (self.idx + 1) / n
+            x0, tw = self.col_x[0], self.col_x[-1] + g.col_w - self.col_x[0]
+            yb = self.FOOTER_H - dp(3)
+            th = max(2, int(dp(2)))
+            Color(fg[0], fg[1], fg[2], 0.3)
+            Rectangle(pos=(x0, yb), size=(tw, 1))
+            Color(*fg)
+            Rectangle(pos=(x0, yb - th / 2), size=(tw * frac, th))
+            PopMatrix()
+        for path, x, y, w, h in pics:
+            pv.add_widget(Pic(path, gray=gray, pos=(round(x + il), round(y + ib)), size=(w, h),
+                              size_hint=(None, None)))
+
+        n = len(self.pages)
+        pct = int(round(100 * (self.idx + 1) / n))
+        ci = bisect_right(self.chap_blocks, self.page_pos[self.idx][0]) - 1
+        chap = self.book.chapters[ci][0] if ci >= 0 else ''
+        self.foot_l.text = chap
+        self.foot_l.shorten = True
+        self.foot_l.shorten_from = 'right'
+        b0, off0 = self.page_pos[self.idx]
+        if self.book.pagelist and self.app.prefs['book_pages']:
+            j = bisect_right(self.pl_blocks, b0) - 1
+            lab = self.book.pagelist[j][0] if j >= 0 else self.book.pagelist[0][0]
+            self.foot_r.text = '%s з %d  ·  %d%%' % (lab, self.book.page_total, pct)
+        else:
+            real = min(self.real_total, (self.cum[b0] + off0) // PAGE_CH + 1) if self.cum else 1
+            self.foot_r.text = '%d з %d  ·  %d%%' % (real, self.real_total, pct)
+        self.entry['pct'] = pct
+
+    # ---------- гортання
+    def _go(self, idx, flash=True):
+        idx = max(0, min(len(self.pages) - 1, idx))
+        if idx == self.idx:
+            return
+        self.idx = idx
+        self.turns += 1
+        p = self.app.prefs
+        self.render()
+        if flash and p['eink'] and p['flash_every'] and self.turns % p['flash_every'] == 0:
+            self._do_flash()
+        self.seek.set(idx, len(self.pages) - 1)
+        self._queue_save()
+
+    def _do_flash(self):
+        """Повне оновлення, як в e-ink: чорний, потім білий спалах проти «привидів»."""
+        bg = self.app.colors[0]
+        self._flash_c.rgba = (0, 0, 0, 1) if bg[0] > 0.3 else (1, 1, 1, 1)
+        self.root_f.add_widget(self._flash)
+        Clock.schedule_once(lambda dt: setattr(self._flash_c, 'rgba', bg), 0.09)
+        Clock.schedule_once(lambda dt: self.root_f.remove_widget(self._flash), 0.16)
+
+    def next_page(self):
+        self._go(self.idx + 1)
+
+    def prev_page(self):
+        self._go(self.idx - 1)
+
+    def _seek_preview(self, v):
+        n = len(self.pages)
+        self.foot_r.text = '%d / %d  ·  %d%%' % (v + 1, n, int(round(100 * (v + 1) / n)))
+
+    def _seek_done(self, v):
+        self._go(int(v), flash=False)
+
+    def go_to_block(self, block):
+        self._go(max(0, bisect_right(self.page_pos, (block, 0)) - 1), flash=False)
+
+    def _queue_save(self):
+        if self.page_pos:
+            self.entry['block'], self.entry['off'] = self.page_pos[self.idx]
+            self.entry['t'] = time.time()
+        if self._save_ev:
+            self._save_ev.cancel()
+        self._save_ev = Clock.schedule_once(lambda dt: self.app.save_state(), 0.8)
