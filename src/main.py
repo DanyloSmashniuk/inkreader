@@ -16,20 +16,20 @@ os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', 'InkReader')   # збігаєть
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.effects.scroll import ScrollEffect
 from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Translate
 from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import NoTransition, Screen, ScreenManager
-from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.utils import escape_markup, platform
 
 import fonts
 from book_loader import SUPPORTED_EXTS, guess_ext, load_book
 from config import DATA_VERSION, DEFAULT_PREFS, FLASH_CYCLE, MARGIN_NAMES, MARGINS, SPACINGS, VIEWS, palette
+from file_browser import browse_books
+from library import LibraryScreen
 from typeset import Geometry, justify_positions, typeset
 from widgets import (
     ICON_PATH,
@@ -47,84 +47,6 @@ from widgets import (
 )
 
 log = logging.getLogger('inkreader')
-
-# ------------------------------------------------------------------ бібліотека
-
-class LibraryScreen(Screen):
-    def set_insets(self, l, t, r, b):
-        """Відступи під системні панелі Android: padding всередині екрана (сам екран не зсуваємо:
-        у зсунутому RelativeLayout Kivy віддає кнопкам «відпускання» у координатах вікна.)"""
-        self.root_box.padding = (l, t, r, b)       # BoxLayout.padding: left, TOP, right, BOTTOM
-
-    def __init__(self, app, **kw):
-        super().__init__(**kw)
-        self.app = app
-        self.root_box = BgBox(orientation='vertical')
-        self.add_widget(self.root_box)
-
-        self.bar = BoxLayout(size_hint_y=None, height=dp(60), padding=(dp(16), 0, 0, 0))
-        self.title_lbl = Label(text='[b]Бібліотека[/b]', markup=True, halign='left',
-                               valign='middle', font_size=sp(20))
-        self.title_lbl.bind(size=lambda w, s: setattr(w, 'text_size', s))
-        self.view_btn = flat_button('', self.app.cycle_view, size_hint_x=None,
-                                    width=dp(120), font_size=sp(12))
-        self.add_btn = flat_button('+ Книга', self.app.pick_file, size_hint_x=None,
-                                   width=dp(100))
-        for w in (self.title_lbl, self.view_btn, self.add_btn):
-            self.bar.add_widget(w)
-        self.rule = Rule()
-        self.root_box.add_widget(self.bar)
-        self.root_box.add_widget(self.rule)
-
-        self.scroll = ScrollView(effect_cls=ScrollEffect, bar_width=dp(10),
-                                 scroll_type=['bars', 'content'], scroll_wheel_distance=dp(90))
-        self.listbox = BoxLayout(orientation='vertical', size_hint_y=None)
-        self.listbox.bind(minimum_height=self.listbox.setter('height'))
-        self.scroll.add_widget(self.listbox)
-        self.root_box.add_widget(self.scroll)
-
-    def refresh(self):
-        bg, fg = self.app.colors
-        self.root_box.set_bg(bg)
-        self.rule.set_color(fg)
-        self.scroll.bar_color = fg
-        self.scroll.bar_inactive_color = (fg[0], fg[1], fg[2], 0.4)
-        for w in (self.title_lbl, self.view_btn, self.add_btn):
-            w.color = fg
-        p = self.app.prefs
-        self.view_btn.text = 'Вигляд\n%s · %s' % ('E-ink' if p['eink'] else 'Колір',
-                                                    'темна' if p['theme'] == 'dark' else 'світла')
-        self.listbox.clear_widgets()
-        if not self.app.library:
-            hint = Label(text='Порожньо.\nНатисни «+ Книга» і обери EPUB або FB2.',
-                         color=fg, halign='center', size_hint_y=None, height=dp(200))
-            hint.bind(size=lambda w, s: setattr(w, 'text_size', (s[0], None)))
-            self.listbox.add_widget(hint)
-            return
-        for entry in self.app.library:
-            row = BoxLayout(size_hint_y=None, height=dp(108),
-                            padding=(dp(12), dp(8), 0, dp(8)), spacing=dp(8))
-            cover = entry.get('cover')
-            if cover and os.path.exists(cover):
-                thumb = Pic(cover, gray=p['eink'], size_hint_x=None, width=dp(62))
-            else:
-                thumb = BgBox(color=(fg[0], fg[1], fg[2], 0.15), size_hint_x=None, width=dp(62))
-                thumb.add_widget(Label(
-                    text='[b]%s[/b]' % escape_markup((entry['title'] or '?')[:1].upper()),
-                    markup=True, color=fg, font_size=sp(26)))
-            row.add_widget(thumb)
-            sub = escape_markup(entry.get('author') or '—')
-            btn = RowButton(text='[b]%s[/b]\n[size=%d]%s  ·  %d%%[/size]' % (
-                escape_markup(entry['title']), int(sp(13)), sub, entry.get('pct', 0)),
-                color=fg)
-            btn.bind(on_release=lambda _w, e=entry: self.app.open_entry(e))
-            rm = flat_button('×', lambda e=entry: self.app.remove_entry(e), fg,
-                             size_hint_x=None, width=dp(52), font_size=sp(22))
-            row.add_widget(btn)
-            row.add_widget(rm)
-            self.listbox.add_widget(row)
-            self.listbox.add_widget(Rule(color=(fg[0], fg[1], fg[2], 0.5), thick=1))
-
 
 # ---------------------------------------------------------------------- читання
 
@@ -896,7 +818,7 @@ class InkReaderApp(App):
                 return
             except Exception as e:  # noqa: BLE001 — jnius кидає різні Java-винятки; є запасний вибір
                 log.warning('системний вибір файлу недоступний: %s', e)
-        self.browse_books()
+        browse_books(self)
 
     PICK_CODE = 7311
 
@@ -928,113 +850,6 @@ class InkReaderApp(App):
         except Exception as e:  # noqa: BLE001 — межа інтерфейсу: показуємо помилку, а не падаємо
             log.exception('не вдалося відкрити вибраний файл')
             self.message('Не вдалося відкрити файл', repr(e))
-
-    def browse_books(self):
-        """Власний вибір книги: кроки по теках, швидкі місця, тап по книзі відкриває її."""
-        bg, fg = self.colors
-        dim = '%02x%02x%02x' % tuple(int(255 * (0.55 * c + 0.45 * b)) for c, b in zip(fg[:3], bg[:3]))
-        home = os.path.expanduser('~')
-        android = os.path.isdir('/storage/emulated/0')
-        root = '/storage/emulated/0' if android else home
-        state = {'path': root}
-
-        outer = BoxLayout(orientation='vertical', spacing=dp(6), padding=(dp(6), 0, dp(6), dp(6)))
-        top = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(4))
-        up = flat_button('‹', lambda: go(os.path.dirname(state['path'])), fg,
-                         size_hint_x=None, width=dp(48), font_size='30sp')
-        where = Label(color=fg, halign='left', valign='middle', shorten=True,
-                      shorten_from='left', font_size='15sp')
-        where.bind(size=lambda w, sz: setattr(w, 'text_size', sz))
-        top.add_widget(up)
-        top.add_widget(where)
-        outer.add_widget(top)
-
-        places = [('Дім', home)]
-        for name, label in (('Books', 'Books'), ('Книги', 'Книги'), ('Download', 'Завантаження'),
-                            ('Downloads', 'Завантаження'), ('Завантаження', 'Завантаження'),
-                            ('Documents', 'Документи'), ('Документи', 'Документи')):
-            d = os.path.join(root, name)
-            if os.path.isdir(d) and all(d != x[1] for x in places) \
-                    and all(label != x[0] for x in places):
-                places.append((label, d))
-        if android:
-            places[0] = ('Пам\'ять', root)
-        if platform == 'win':
-            for letter in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
-                if os.path.isdir(letter + ':\\'):
-                    places.append((letter + ':', letter + ':\\'))
-        chips = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        for label, d in places[:8]:
-            chips.add_widget(flat_button(label, lambda d=d: go(d), fg, font_size='15sp'))
-        outer.add_widget(chips)
-        outer.add_widget(Rule(fg, 1))
-
-        sv = make_scroll(fg)
-        lst = BoxLayout(orientation='vertical', size_hint_y=None)
-        lst.bind(minimum_height=lst.setter('height'))
-        sv.add_widget(lst)
-        outer.add_widget(sv)
-        popup = self.make_popup('Обери книгу', outer, (0.95, 0.92))
-        outer.add_widget(Rule(fg, 1))
-        outer.add_widget(flat_button('Скасувати', popup.dismiss, fg,
-                                     size_hint_y=None, height=dp(48)))
-
-        def size_text(n):
-            for u in ('Б', 'КБ', 'МБ', 'ГБ'):
-                if n < 1024 or u == 'ГБ':
-                    return '%d %s' % (n, u) if u == 'Б' else '%.1f %s' % (n, u)
-                n /= 1024.0
-
-        def note(text):
-            lbl = Label(text=text, color=fg, size_hint_y=None, height=dp(120))
-            lst.add_widget(lbl)
-
-        def go(path):
-            path = os.path.abspath(path)
-            try:
-                names = sorted(os.listdir(path), key=str.lower)
-            except OSError:
-                note('Немає доступу до цієї теки')
-                return
-            state['path'] = path
-            shown = ('~' + path[len(home):]) if path == home or path.startswith(home + os.sep) else path
-            where.text = shown
-            up.disabled = path == os.path.dirname(path)
-            lst.clear_widgets()
-            dirs, files = [], []
-            for n in names:
-                if n.startswith('.'):
-                    continue
-                full = os.path.join(path, n)
-                if os.path.isdir(full):
-                    dirs.append((n, full))
-                elif n.lower().endswith(SUPPORTED_EXTS):
-                    files.append((n, full))
-            for n, full in dirs:
-                row = RowButton(text='[b]%s[/b]   [color=%s]›[/color]' % (escape_markup(n), dim),
-                                color=fg, size_hint_y=None, height=dp(54), font_size='17sp')
-                row.bind(on_release=lambda w, full=full: go(full))
-                lst.add_widget(row)
-                lst.add_widget(Rule(fg_soft, 1))
-            for n, full in files:
-                try:
-                    sz = size_text(os.path.getsize(full))
-                except OSError:
-                    sz = ''
-                ext = os.path.splitext(n)[1].lstrip('.').upper()
-                row = RowButton(text='%s\n[size=13sp][color=%s]%s · %s[/color][/size]'
-                                % (escape_markup(n), dim, ext, sz),
-                                color=fg, size_hint_y=None, height=dp(62), font_size='17sp')
-                row.bind(on_release=lambda w, full=full: (popup.dismiss(), self._picked([full])))
-                lst.add_widget(row)
-                lst.add_widget(Rule(fg_soft, 1))
-            if not dirs and not files:
-                note('Тут немає книг і тек')
-            sv.scroll_y = 1
-
-        fg_soft = (fg[0], fg[1], fg[2], 0.25)
-        go(state['path'])
-        popup.open()
 
     def _picked(self, selection):
         if selection and selection[0]:
