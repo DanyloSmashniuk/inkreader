@@ -10,10 +10,14 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
+      - name: Системні бібліотеки для Kivy у віртуальному дисплеї
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1 libgl1-mesa-dri
       - run: pip install -r requirements-dev.txt
       - name: Лінтер
         run: ruff check src tests
       - name: Типи (book_loader, typeset, textfix, hyph)
         run: mypy
-      - name: Тести та покриття
-        run: pytest -q --cov --cov-report=term-missing
+      - name: Тести, покриття й димовий тест інтерфейсу (xvfb)
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: xvfb-run -a pytest -q --cov --cov-report=term-missing

@@ -120,7 +120,7 @@ assets/            іконки та знімки екрана
 
 ```bash
 pip install -r requirements-dev.txt
-pytest --cov          # тести й покриття (модулі інтерфейсу Kivy не входять)
+xvfb-run -a pytest --cov   # тести, покриття й димовий тест інтерфейсу (на Linux потрібен xvfb)
 ruff check src tests  # лінтер
 mypy                  # типи для book_loader, typeset, textfix, hyph
 ```
