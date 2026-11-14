@@ -16,7 +16,11 @@ ignore = [
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["src/main.py", "src/fontdata.py"]     # інтерфейс Kivy перевіряється вручну на пристроях
+omit = [      # інтерфейс Kivy перевіряється вручну на пристроях
+    "src/main.py", "src/fontdata.py", "src/widgets.py", "src/library.py", "src/file_browser.py",
+    "src/reader.py", "src/reader_menu.py", "src/reader_settings.py", "src/gestures.py",
+    "src/android_support.py", "src/fonts.py",
+]
 
 [tool.coverage.report]
 fail_under = 70

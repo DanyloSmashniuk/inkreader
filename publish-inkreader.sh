@@ -62,8 +62,8 @@ else
   printf '\033[1;32m✓\033[0m Linux-архів новіший за код: %s\n' "$TAR_INPUT"
 fi
 for pat in 'elif x < 0.3' 'def scroll_by'; do
-  if grep -q "$pat" "$ROOT/src/main.py"; then printf '\033[1;32m✓\033[0m main.py містить «%s»\n' "$pat"
-  else printf '\033[1;31m✗\033[0m main.py без «%s» (стара версія?)\n' "$pat"; PROBLEMS=1; fi
+  if grep -rq --include='*.py' -e "$pat" "$ROOT/src"; then printf '\033[1;32m✓\033[0m src/ містить «%s»\n' "$pat"
+  else printf '\033[1;31m✗\033[0m src/ без «%s» (стара версія?)\n' "$pat"; PROBLEMS=1; fi
 done
 if grep -q 'org.example' "$ROOT/buildozer.spec"; then
   printf '\033[1;33m!\033[0m package.domain = org.example (заглушка). Після публікації змінити буде не можна без втрати оновлень.\n'

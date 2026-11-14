@@ -41,7 +41,7 @@ clean() { rm -rf "$B/venv" "$B/python-installs" "$B/requirements.txt"; }
 patch_p4a || echo "p4a ще не склонований: перший запуск може впасти на pip; запусти скрипт ще раз."
 clean
 if ! buildozer android debug 2>&1 | tee build.log | tail -n 25; then :; fi
-if ! ls bin/*.apk >/dev/null 2>&1 || [ "$(ls -t bin/*.apk | head -1)" -ot "$ROOT/src/main.py" ]; then
+if ! ls bin/*.apk >/dev/null 2>&1 || [ -n "$(find "$ROOT/src" -name '*.py' -newer "$(ls -t bin/*.apk | head -1)" | head -n1)" ]; then
   echo "APK не зібралась (або застаріла). Якщо це перший запуск, патч p4a застосовується тільки після"
   echo "його клонування: запусти скрипт ще раз."; exit 1
 fi
