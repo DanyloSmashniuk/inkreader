@@ -34,6 +34,8 @@ header{display:flex;align-items:center;justify-content:space-between;min-height:
 .brand{display:flex;align-items:center;gap:10px;font:700 1.25rem var(--display)}
 .brand img{width:34px;height:34px;border-radius:8px}
 header .btn{padding:9px 18px;font-size:.92rem}
+header .btn{white-space:nowrap}
+@media (max-width:520px){.brand{font-size:1.1rem}.brand img{width:30px;height:30px}header .btn{padding:8px 14px;font-size:.85rem}}
 
 .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:clamp(28px,6vw,80px);align-items:center;padding-block:clamp(24px,5vw,64px) clamp(48px,7vw,88px)}
 .lede{font-size:1.2rem;color:var(--muted);max-width:30rem;margin-top:20px}
@@ -121,7 +123,7 @@ var LINKS = REPO.indexOf("USERNAME") === 0 ? { android: "", linux: "", windows: 
   var tips={android:'Файл APK. Дозвольте встановлення з цього джерела, коли Android запитає.',windows:'Запустіть InkReader-setup.exe і пройдіть установлення. Якщо Windows застереже про невідомого видавця, натисніть «Докладніше» → «Все одно виконати».',linux:'Розпакуйте архів і запустіть ./install.sh'};
   function lock(txt){btn.textContent=txt;btn.setAttribute('aria-disabled','true');btn.addEventListener('click',function(e){e.preventDefault()})}
   if(os==='other'){hint.textContent='Є версії для Android, Windows і Linux. Відкрийте сайт на такому пристрої.';lock('Android, Windows і Linux')}
-  else{hint.textContent=tips[os];var u=LINKS[os];if(u){btn.textContent='Завантажити для '+names[os];btn.href=u}else lock('Скоро')}
+  else{hint.textContent=tips[os];var u=LINKS[os];if(u){btn.textContent=innerWidth<520?'Завантажити':'Завантажити для '+names[os];btn.href=u}else lock('Скоро')}
   var v=document.getElementById('promo');
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){v.removeAttribute('autoplay');v.pause();v.controls=true}
   else{var p=v.play();if(p&&p.catch)p.catch(function(){v.controls=true})}
