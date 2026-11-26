@@ -160,6 +160,7 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
 
         # адаптивна геометрія: поля у % від ширини, обмежена довжина рядка, 2 колонки на широких екранах
         mx = max(dp(10), W * MARGINS[p['margin']])
+        self._margin = mx                     # ширина поля: у ньому малюється стрічка закладки
         avail_w = W - 2 * mx
         max_col = faces.fs * 34
         gutter = max(dp(24), mx)
@@ -283,8 +284,9 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
             Color(*fg)
             Rectangle(pos=(x0, yb - th / 2), size=(tw * frac, th))
             if self.has_bookmark():               # стрічка закладки в правому верхньому куті
-                rw, rh = dp(16), dp(30)
-                xr, ytop = self.page.width - dp(16) - rw, self.page.height
+                mx = getattr(self, '_margin', dp(16))
+                rw, rh = max(dp(8), min(dp(16), mx - dp(2))), dp(40)     # стрічка лежить у полі, текст не затуляє
+                xr, ytop = self.page.width - rw, self.page.height
                 Color(*fg)
                 Rectangle(pos=(xr, ytop - rh), size=(rw, rh))
                 Color(*bg)
