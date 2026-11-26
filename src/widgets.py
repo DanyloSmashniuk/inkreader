@@ -110,6 +110,7 @@ class SeekBar(Widget):
         super().__init__(**kw)
         self.on_change, self.on_preview = on_change, on_preview
         self.vmax, self.value = 1, 0
+        self.marks = []                       # значення (номери сторінок), де стоять закладки
         self.fg = (0, 0, 0, 1)
         self._drag = False
         self.bind(pos=self._draw, size=self._draw)
@@ -117,6 +118,12 @@ class SeekBar(Widget):
     def set(self, value, vmax):
         if not self._drag:
             self.value, self.vmax = value, max(1, vmax)
+            self._draw()
+
+    def set_marks(self, marks):
+        marks = sorted(set(marks))
+        if marks != self.marks:
+            self.marks = marks
             self._draw()
 
     def set_color(self, fg):
@@ -136,6 +143,9 @@ class SeekBar(Widget):
             Rectangle(pos=(self.x + pad, cy - th / 2), size=(w, th))
             Color(*self.fg)
             Rectangle(pos=(self.x + pad, cy - th), size=(cx - self.x - pad, th * 2))
+            for m in self.marks:              # закладки: штрихи над лінією, «язичок» їх не закриває
+                mx = self.x + pad + w * (m / self.vmax)
+                Rectangle(pos=(mx - dp(1.5), cy + dp(9)), size=(dp(3), dp(12)))
             Rectangle(pos=(cx - k / 2, cy - k / 2), size=(k, k))
 
     def _from_x(self, x):

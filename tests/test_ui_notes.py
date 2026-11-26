@@ -186,3 +186,19 @@ def test_notes_popup_lists_jumps_and_deletes(reading):
     tick(2)
     assert r.entry['hl'] == [] and not r._hl_idx
     assert app._on_key(None, 27) is True and r._modal_scroll is None
+
+
+def test_bookmarks_marked_on_seek_bar(reading):
+    app, r = reading
+    for page in (2, 5):
+        r._go(page, flash=False)
+        r.toggle_bookmark()
+    r.show_menu(True)
+    assert r.seek.marks == [2, 5]
+    r.toggle_bookmark()                               # знімає закладку поточної (5-ї) сторінки
+    assert r.seek.marks == [2]
+    r.relayout()
+    tick(2)
+    r.show_menu(False)
+    r.show_menu(True)
+    assert len(r.seek.marks) == 1

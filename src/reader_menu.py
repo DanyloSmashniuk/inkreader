@@ -75,6 +75,14 @@ class MenuMixin:
             self.root_f.remove_widget(self.top_bar)
             self.root_f.remove_widget(self.bottom_bar)
 
+    def _seek_marks(self):
+        """Штрихи закладок на повзунку: сторінка, на якій лежить кожна закладка."""
+        if not self.page_pos:
+            return
+        e = self.entry or {}
+        self.seek.set_marks(max(0, bisect_right(self.page_pos, (b['b'], b['o'])) - 1)
+                            for b in e.get('bm', ()))
+
     def _refresh_menu_labels(self):
         p = self.app.prefs
         b = self.btns
@@ -92,6 +100,7 @@ class MenuMixin:
         b['pages'].text = 'Сторінки\n%s' % ('за книгою' if p['book_pages'] and self.book
                                             and self.book.pagelist else 'умовні')
         b['bookmark'].text = 'Закладка\n%s' % ('зняти' if self.has_bookmark() else 'додати')
+        self._seek_marks()
         e = self.entry or {}
         b['notes'].text = 'Нотатки\n%d закл. · %d вид.' % (len(e.get('bm', ())), len(e.get('hl', ())))
         b['flash'].text = 'Оновлення\n%s' % ('вимк.' if not p['flash_every'] else
