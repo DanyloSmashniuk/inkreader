@@ -286,7 +286,7 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
             if self.has_bookmark():               # стрічка закладки в правому верхньому куті
                 mx = getattr(self, '_margin', dp(16))
                 rw, rh = max(dp(8), min(dp(16), mx - dp(2))), dp(40)     # стрічка лежить у полі, текст не затуляє
-                xr, ytop = self.page.width - rw, self.page.height
+                xr, ytop = self.width - il - ir - rw, self.height - it_ - ib     # безпечна зона, не весь віджет
                 Color(*fg)
                 Rectangle(pos=(xr, ytop - rh), size=(rw, rh))
                 Color(*bg)
