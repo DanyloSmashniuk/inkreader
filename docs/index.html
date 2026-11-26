@@ -40,6 +40,8 @@ header .btn{white-space:nowrap}
 .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:clamp(28px,6vw,80px);align-items:center;padding-block:clamp(24px,5vw,64px) clamp(48px,7vw,88px)}
 .lede{font-size:1.2rem;color:var(--muted);max-width:30rem;margin-top:20px}
 .hint{margin-top:26px;min-height:1.6em;text-transform:none;letter-spacing:.02em;font-size:.9rem}
+.get{margin-top:22px}
+.also{margin-top:14px;text-transform:none;letter-spacing:.02em;font-size:.88rem}.also a{color:var(--ink);text-underline-offset:3px}
 video{width:100%;aspect-ratio:9/16;display:block;background:#E4E5E0;border-radius:20px;box-shadow:0 0 0 1px var(--line)}
 
 .points{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:1px solid var(--line)}
@@ -86,6 +88,8 @@ footer{border-top:1px solid var(--line);padding-block:28px 48px;color:var(--mute
         <h1 style="margin-top:14px">Читалка, яка не втомлює очі</h1>
         <p class="lede">Режим «електронні чорнила» для звичайного екрана. Без реклами, акаунта та інтернету.</p>
         <p class="hint mono" id="hint"></p>
+        <p class="get"><a class="btn" id="dl2" href="#">Завантажити</a></p>
+        <p class="also mono" id="also"></p>
       </div>
       <video id="promo" src="promo.mp4" poster="poster.webp" autoplay muted loop playsinline preload="auto" aria-label="Промо-ролик InkReader"></video>
     </section>
@@ -118,12 +122,23 @@ var LINKS = REPO.indexOf("USERNAME") === 0 ? { android: "", linux: "", windows: 
 (function(){
   var ua=(navigator.userAgent||'').toLowerCase();
   var os=ua.indexOf('android')>-1?'android':ua.indexOf('windows')>-1?'windows':(ua.indexOf('linux')>-1||ua.indexOf('x11')>-1)?'linux':'other';
-  var btn=document.getElementById('dl'),hint=document.getElementById('hint');
+  var btns=[document.getElementById('dl'),document.getElementById('dl2')],hint=document.getElementById('hint'),also=document.getElementById('also');
   var names={android:'Android',linux:'Linux',windows:'Windows'};
   var tips={android:'Файл APK. Дозвольте встановлення з цього джерела, коли Android запитає.',windows:'Запустіть InkReader-setup.exe і пройдіть установлення. Якщо Windows застереже про невідомого видавця, натисніть «Докладніше» → «Все одно виконати».',linux:'Розпакуйте архів і запустіть ./install.sh'};
-  function lock(txt){btn.textContent=txt;btn.setAttribute('aria-disabled','true');btn.addEventListener('click',function(e){e.preventDefault()})}
-  if(os==='other'){hint.textContent='Є версії для Android, Windows і Linux. Відкрийте сайт на такому пристрої.';lock('Android, Windows і Linux')}
-  else{hint.textContent=tips[os];var u=LINKS[os];if(u){btn.textContent=innerWidth<520?'Завантажити':'Завантажити для '+names[os];btn.href=u}else lock('Скоро')}
+  function lock(b,txt){b.textContent=txt;b.setAttribute('aria-disabled','true');b.addEventListener('click',function(e){e.preventDefault()})}
+  function others(skip){var out=[];['android','windows','linux'].forEach(function(k){if(k!==skip&&LINKS[k])out.push('<a href="'+LINKS[k]+'">'+names[k]+'</a>')});return out.join(' · ')}
+  if(os==='other'){
+    btns.forEach(function(b){b.style.display='none'});
+    hint.textContent='Є версії для Android, Windows і Linux. Оберіть свою.';
+    also.innerHTML=others('')
+  }else{
+    hint.textContent=tips[os];var u=LINKS[os];
+    if(u){
+      btns[1].textContent='Завантажити для '+names[os];btns[1].href=u;
+      btns[0].textContent=innerWidth<520?'Для '+names[os]:'Завантажити для '+names[os];btns[0].href=u;
+      var rest=others(os);also.innerHTML=rest?'Також: '+rest:''
+    }else btns.forEach(function(b){lock(b,'Скоро')})
+  }
   var v=document.getElementById('promo');
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){v.removeAttribute('autoplay');v.pause();v.controls=true}
   else{var p=v.play();if(p&&p.catch)p.catch(function(){v.controls=true})}
