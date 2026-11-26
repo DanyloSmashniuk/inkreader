@@ -4,6 +4,7 @@
 Запуск вручну: xvfb-run -a pytest tests/test_ui_smoke.py
 """
 import os
+import time
 
 import pytest
 
@@ -127,3 +128,82 @@ def test_import_from_android_uri(app, fb2_path):
     app._import_uri(Uri(), Activity())                    # повторно: той самий запис
     tick()
     assert len(app.library) == 1 and app.sm.current == 'reader'
+
+
+# ------------------------------------------------------------------ дотики (синтетичні)
+
+def drag(x0, y0, x1, y1, steps=8, hold=0):
+    """Палець: торкнутися (x0, y0), провести до (x1, y1), відпустити. Координати вікна."""
+    from kivy.clock import Clock
+    from kivy.tests.common import UnitTestTouch
+    t = UnitTestTouch(x0, y0)
+    t.touch_down()
+    for _ in range(12):                     # ScrollView передає дотик дітям після короткої паузи
+        time.sleep(0.02)
+        Clock.tick()
+    for i in range(1, steps + 1):
+        t.touch_move(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps)
+        Clock.tick()
+    for _ in range(hold):
+        Clock.tick()
+    t.touch_up()
+    Clock.tick()
+
+
+@pytest.fixture
+def shown(app):
+    from kivy.core.window import Window
+    Window.add_widget(app.sm)
+    Window.size = (800, 1200)
+    tick(3)
+    yield app
+    Window.remove_widget(app.sm)
+
+
+def row_center(app, i=0):
+    rows = [w for w in app.library_screen.listbox.children if hasattr(w, 'action')][::-1]
+    r = rows[i]
+    cx, cy = r.to_window(r.center_x, r.center_y)             # координати вікна (враховують прокрутку)
+    return r, cx, cy
+
+
+def test_swipe_row_reveals_delete_and_removes(shown, fb2_path, epub_path):
+    app = shown
+    app.add_book(fb2_path)
+    app.add_book(epub_path)
+    tick()
+    app.show_library()
+    tick(3)
+    assert len(app.library) == 2
+    row, cx, cy = row_center(app, 0)
+    drag(cx + 200, cy, cx - 100, cy)                    # свайп ліворуч
+    assert row.is_open and len(app.library) == 2
+    drag(cx + 200, cy, cx - 50, cy)                     # інший рядок/той самий: свайп уже відкритого
+    row, cx, cy = row_center(app, 0)
+    assert row.is_open
+    bx, by = row.to_window(row.right - 40, row.center_y)
+    drag(bx, by, bx, by, steps=1)                    # дотик по кнопці «Видалити»
+    tick(2)
+    assert len(app.library) == 1
+
+
+def test_swipe_row_tap_opens_and_short_drag_closes(shown, fb2_path, epub_path):
+    app = shown
+    app.add_book(fb2_path)
+    app.add_book(epub_path)
+    app.show_library()
+    tick(3)
+    row, cx, cy = row_center(app, 0)
+    drag(cx + 100, cy, cx + 100, cy, steps=1)           # короткий дотик відкриває книгу
+    tick(2)
+    assert app.sm.current == 'reader'
+    app.show_library()
+    tick(3)
+    row, cx, cy = row_center(app, 0)
+    drag(cx + 200, cy, cx + 150, cy)                    # малий свайп: рядок лишається закритим
+    assert not row.is_open and app.sm.current == 'library'
+    drag(cx + 200, cy, cx - 100, cy)
+    assert row.is_open
+    _row2, x2, y2 = row_center(app, 1)
+    drag(x2, y2, x2, y2, steps=1)                       # дотик по іншому рядку закриває перший
+    assert not row.is_open and app.sm.current == 'library'     # і книгу не відкриває
