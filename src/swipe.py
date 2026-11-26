@@ -9,7 +9,7 @@ from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
 
 DRAG_START = dp(10)       # менший рух вважається дотиком
-OPEN_FRACTION = 0.5       # скільки кнопки треба відкрити пальцем, щоб рядок лишився відкритим
+OPEN_FRACTION = 0.85      # скільки кнопки треба відкрити, щоб рядок лишився відкритим; менше — повертається
 
 
 class SwipeRow(FloatLayout):
