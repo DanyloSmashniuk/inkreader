@@ -31,13 +31,14 @@ class MenuMixin:
         self.top_bar.add_widget(self.top_rule)
 
         self.bottom_bar = BgBox(orientation='vertical', size_hint=(1, None),
-                                height=dp(228), pos_hint={'x': 0, 'y': 0})
+                                height=dp(284), pos_hint={'x': 0, 'y': 0})
         self.bottom_rule = Rule()
         self.seek = SeekBar(self._seek_done, self._seek_preview, size_hint_y=None,
                             height=dp(44))
         r1 = BoxLayout(size_hint_y=None, height=dp(56))
         r2 = BoxLayout(size_hint_y=None, height=dp(56))
         r3 = BoxLayout(size_hint_y=None, height=dp(56))
+        r4 = BoxLayout(size_hint_y=None, height=dp(56))
         self.btns = {}
         spec = [(r1, 'minus', lambda: self.change_font(-2)),
                 (r1, 'plus', lambda: self.change_font(2)),
@@ -50,12 +51,14 @@ class MenuMixin:
                 (r2, 'hyph', self.toggle_hyph),
                 (r2, 'flash', self.cycle_flash),
                 (r3, 'bold', self.toggle_bold),
-                (r3, 'pages', self.toggle_pages)]
+                (r3, 'pages', self.toggle_pages),
+                (r4, 'bookmark', self.toggle_bookmark),
+                (r4, 'notes', self.show_notes)]
         for parent, key, cb in spec:
             b = flat_button('', cb, font_size=sp(12))
             self.btns[key] = b
             parent.add_widget(b)
-        for w in (self.bottom_rule, self.seek, r1, r2, r3):
+        for w in (self.bottom_rule, self.seek, r1, r2, r3, r4):
             self.bottom_bar.add_widget(w)
 
     def show_menu(self, show):
@@ -88,6 +91,9 @@ class MenuMixin:
         b['bold'].text = 'Накреслення\n%s' % ('жирне' if p['bold'] else 'звичайне')
         b['pages'].text = 'Сторінки\n%s' % ('за книгою' if p['book_pages'] and self.book
                                             and self.book.pagelist else 'умовні')
+        b['bookmark'].text = 'Закладка\n%s' % ('зняти' if self.has_bookmark() else 'додати')
+        e = self.entry or {}
+        b['notes'].text = 'Нотатки\n%d закл. · %d вид.' % (len(e.get('bm', ())), len(e.get('hl', ())))
         b['flash'].text = 'Оновлення\n%s' % ('вимк.' if not p['flash_every'] else
                                               'щоразу' if p['flash_every'] == 1 else
                                               'кожні %d' % p['flash_every'])
@@ -118,8 +124,8 @@ class MenuMixin:
             lst.add_widget(b)
             lst.add_widget(Rule(color=(fg[0], fg[1], fg[2], 0.4), thick=1))
         scroll.add_widget(lst)
-        self._toc_popup, self._toc_scroll = popup, scroll
-        popup.bind(on_dismiss=lambda *_: setattr(self, '_toc_scroll', None))
+        self._modal_popup, self._modal_scroll = popup, scroll
+        popup.bind(on_dismiss=lambda *_: setattr(self, '_modal_scroll', None))
 
         def focus_current(_dt):
             """Відкриває зміст одразу на поточному розділі."""

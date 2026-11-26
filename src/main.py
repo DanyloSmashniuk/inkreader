@@ -202,6 +202,7 @@ class InkReaderApp(AndroidMixin, App):
             return
         if entry.get('v') != DATA_VERSION:      # нормалізація змінила нумерацію блоків
             entry['block'], entry['off'], entry['pct'], entry['v'] = 0, 0, 0, DATA_VERSION
+            entry['bm'], entry['hl'] = [], []      # позиції закладок і виділень прив'язані до нумерації блоків
         if book.cover:
             entry['cover'] = book.cover
         entry['t'] = time.time()

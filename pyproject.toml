@@ -19,7 +19,8 @@ source = ["src"]
 omit = [      # інтерфейс Kivy перевіряється вручну на пристроях
     "src/main.py", "src/fontdata.py", "src/widgets.py", "src/library.py", "src/file_browser.py",
     "src/reader.py", "src/reader_menu.py", "src/reader_settings.py", "src/gestures.py",
-    "src/android_support.py", "src/fonts.py",
+    "src/android_support.py", "src/fonts.py", "src/swipe.py", "src/selection.py",
+    "src/reader_notes.py",
 ]
 
 [tool.coverage.report]
@@ -28,4 +29,4 @@ show_missing = true
 
 [tool.mypy]
 ignore_missing_imports = true
-files = ["src/book_loader.py", "src/typeset.py", "src/textfix.py", "src/hyph.py"]
+files = ["src/book_loader.py", "src/typeset.py", "src/textfix.py", "src/hyph.py", "src/notes.py"]

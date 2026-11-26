@@ -1,25 +1,32 @@
 """Екран читання: верстка, малювання сторінки, гортання."""
+import re
 import time
 from bisect import bisect_right
 
 from kivy.clock import Clock
-from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Translate
+from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Translate, Triangle
 from kivy.metrics import dp, sp
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
 
 import fonts
+import notes
 from config import MARGINS
 from gestures import GestureMixin
 from reader_menu import MenuMixin
+from reader_notes import NotesMixin
 from reader_settings import SettingsMixin
+from selection import SelectionMixin
 from typeset import Geometry, justify_positions, typeset
 from widgets import PAGE_CH, BgFloat, Faces, Pic
 
+_TOKEN = re.compile(r'\S+')
+MARK_ALPHA = {1: 0.2, 2: 0.4}      # збережене виділення / поточне виділення
 
-class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
-    """Екран читання: верстка, малювання сторінки, гортання. Меню, налаштування й жести — у міксинах."""
+
+class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, SettingsMixin, Screen):
+    """Екран читання: верстка, малювання сторінки, гортання. Меню, нотатки, виділення й жести — у міксинах."""
     FOOTER_H = dp(34)
     inset = (0, 0, 0, 0)          # l, t, r, b — системні панелі Android
 
@@ -53,6 +60,10 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
         self.page_top = 0
         self._pag_ev = self._save_ev = None
         self._pagination_key = None
+        self._words = []              # слова поточної сторінки: (x0, y0, x1, y1, блок, від, до)
+        self.sel = None               # виділення: діапазон індексів у _words
+        self._hl_idx = {}
+        self._anchor = 0
 
         self.root_f = BgFloat()
         self.add_widget(self.root_f)
@@ -73,6 +84,7 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
                          size=lambda w, v: setattr(self._flash_rect, 'size', v))
 
         self._build_menu()
+        self._build_sel_bar()
         self.bind(size=self._on_resize)
         self.bind(size=self._place_bars)
         self._place_bars()
@@ -84,6 +96,7 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
             bar.set_bg(bg)
         self.top_rule.set_color(fg)
         self.bottom_rule.set_color(fg)
+        self.restyle_sel_bar(bg, fg)
         self.seek.set_color(fg)
         for w in [self.back_btn, self.title_lbl, self.toc_btn] + list(self.btns.values()):
             w.color = fg
@@ -109,6 +122,8 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
         self.turns = 0
         self._pagination_key = None
         self.show_menu(False)
+        self.clear_selection(render=False)
+        self._rebuild_hl()
         self.apply_theme()
         self._schedule_paginate(0.05, (entry.get('block', 0), entry.get('off', 0)))
 
@@ -188,7 +203,7 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
         if not self.pages or not self.geo:
             return
         g, faces = self.geo, self.faces
-        fg = self.app.colors[1]
+        bg, fg = self.app.colors
         gray = self.app.prefs['eink']
         justify = self.app.prefs['justify']
         blocks = self.book.blocks
@@ -199,6 +214,7 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
         only_img = len(items) == 1 and items[0][2][0] == 'i'
         lh = g.lh
         pics = []
+        hit = self._words = []
         il, it_, ir, ib = self.inset
         with pv.canvas:
             PushMatrix()
@@ -215,10 +231,13 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
                     continue
                 _, bi, s, e, style, flag = it
                 heading = style == 'h'
+                spans = None
                 if style == 's':
                     words = ['* * *']
                 else:
-                    words = blocks[bi][1][s:e].split()
+                    text = blocks[bi][1]
+                    spans = [(m.start() + s, m.end() + s) for m in _TOKEN.finditer(text[s:e])]
+                    words = [text[a:b] for a, b in spans]
                     if flag & 1 and words:
                         words[-1] += '-'
                 if not words:
@@ -237,10 +256,22 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
                         xs = justify_positions(words, widths, g.col_w - indent, space)
                     else:
                         xs = [sum(widths[:i]) + space * i for i in range(len(words))]
-                for wd, x in zip(words, xs):
+                marks = [self._mark(bi, a, b, len(hit) + i) for i, (a, b) in enumerate(spans)] if spans else []
+                for k, (wd, x) in enumerate(zip(words, xs)):
                     tex = faces.texture(wd, heading)
                     y = y_top - lh / 2 - tex.height / 2
-                    Rectangle(texture=tex, pos=(round(x_start + x), round(y)), size=tex.size)
+                    wx = round(x_start + x)
+                    if spans:
+                        hit.append((wx + il, y_top - lh + ib, wx + widths[k] + il, y_top + ib,
+                                    bi, spans[k][0], spans[k][1]))
+                        if marks[k]:                       # підкладка: виділення зливається між сусідніми словами
+                            wide = widths[k] + (space if k + 1 < len(marks) and marks[k + 1] == marks[k] else 0)
+                            Color(fg[0], fg[1], fg[2], MARK_ALPHA[marks[k]])
+                            Rectangle(pos=(wx, round(y_top - lh)), size=(wide, lh))
+                            if marks[k] == 1:
+                                Rectangle(pos=(wx, round(y_top - lh)), size=(wide, max(1, int(dp(1)))))
+                            Color(*fg)
+                    Rectangle(texture=tex, pos=(wx, round(y)), size=tex.size)
             # прогрес читання: тонка лінія над підвалом
             n = len(self.pages)
             frac = (self.idx + 1) / n
@@ -251,6 +282,13 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
             Rectangle(pos=(x0, yb), size=(tw, 1))
             Color(*fg)
             Rectangle(pos=(x0, yb - th / 2), size=(tw * frac, th))
+            if self.has_bookmark():               # стрічка закладки в правому верхньому куті
+                rw, rh = dp(16), dp(30)
+                xr, ytop = self.page.width - dp(16) - rw, self.page.height
+                Color(*fg)
+                Rectangle(pos=(xr, ytop - rh), size=(rw, rh))
+                Color(*bg)
+                Triangle(points=[xr, ytop - rh, xr + rw / 2, ytop - rh + dp(10), xr + rw, ytop - rh])
             PopMatrix()
         for path, x, y, w, h in pics:
             pv.add_widget(Pic(path, gray=gray, pos=(round(x + il), round(y + ib)), size=(w, h),
@@ -258,9 +296,7 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
 
         n = len(self.pages)
         pct = int(round(100 * (self.idx + 1) / n))
-        ci = bisect_right(self.chap_blocks, self.page_pos[self.idx][0]) - 1
-        chap = self.book.chapters[ci][0] if ci >= 0 else ''
-        self.foot_l.text = chap
+        self.foot_l.text = self.chapter_at(self.page_pos[self.idx][0])
         self.foot_l.shorten = True
         self.foot_l.shorten_from = 'right'
         b0, off0 = self.page_pos[self.idx]
@@ -273,11 +309,18 @@ class ReaderScreen(GestureMixin, MenuMixin, SettingsMixin, Screen):
             self.foot_r.text = '%d з %d  ·  %d%%' % (real, self.real_total, pct)
         self.entry['pct'] = pct
 
+    def _mark(self, bi, a, b, n):
+        """0 — звичайне слово, 1 — збережене виділення, 2 — поточне виділення."""
+        if self.sel and self.sel[0] <= n <= self.sel[1]:
+            return 2
+        return 1 if notes.overlaps(self._hl_idx, bi, a, b) else 0
+
     # ---------- гортання
     def _go(self, idx, flash=True):
         idx = max(0, min(len(self.pages) - 1, idx))
         if idx == self.idx:
             return
+        self.clear_selection(render=False)
         self.idx = idx
         self.turns += 1
         p = self.app.prefs
