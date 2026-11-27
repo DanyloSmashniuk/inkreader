@@ -50,7 +50,7 @@ def test_read_and_navigate(app, fb2_path, epub_path):
     r.show_menu(False)
     r.show_menu(True)
     r.change_font(2)
-    for name in ('cycle_spacing cycle_margin toggle_font toggle_bold toggle_pages toggle_justify '
+    for name in ('cycle_spacing cycle_margin toggle_font toggle_bold cycle_counter toggle_justify '
                  'toggle_hyph toggle_eink toggle_theme toggle_eink toggle_theme cycle_flash').split():
         getattr(r, name)()
         tick()

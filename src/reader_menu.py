@@ -7,8 +7,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.utils import escape_markup
 
-import fonts
-from config import MARGIN_NAMES
 from widgets import BgBox, RowButton, Rule, SeekBar, flat_button, make_scroll, scroll_by
 
 
@@ -31,34 +29,23 @@ class MenuMixin:
         self.top_bar.add_widget(self.top_rule)
 
         self.bottom_bar = BgBox(orientation='vertical', size_hint=(1, None),
-                                height=dp(284), pos_hint={'x': 0, 'y': 0})
+                                height=dp(112), pos_hint={'x': 0, 'y': 0})
         self.bottom_rule = Rule()
         self.seek = SeekBar(self._seek_done, self._seek_preview, size_hint_y=None,
                             height=dp(44))
-        r1 = BoxLayout(size_hint_y=None, height=dp(56))
-        r2 = BoxLayout(size_hint_y=None, height=dp(56))
-        r3 = BoxLayout(size_hint_y=None, height=dp(56))
-        r4 = BoxLayout(size_hint_y=None, height=dp(56))
+        row = BoxLayout(size_hint_y=None, height=dp(60))
         self.btns = {}
-        spec = [(r1, 'minus', lambda: self.change_font(-2)),
-                (r1, 'plus', lambda: self.change_font(2)),
-                (r1, 'spacing', self.cycle_spacing),
-                (r1, 'margin', self.cycle_margin),
-                (r1, 'font', self.toggle_font),
-                (r2, 'eink', self.toggle_eink),
-                (r2, 'theme', self.toggle_theme),
-                (r2, 'justify', self.toggle_justify),
-                (r2, 'hyph', self.toggle_hyph),
-                (r2, 'flash', self.cycle_flash),
-                (r3, 'bold', self.toggle_bold),
-                (r3, 'pages', self.toggle_pages),
-                (r4, 'bookmark', self.toggle_bookmark),
-                (r4, 'notes', self.show_notes)]
-        for parent, key, cb in spec:
-            b = flat_button('', cb, font_size=sp(12))
+        spec = [('minus', 0.55, lambda: self.change_font(-2)),
+                ('plus', 0.55, lambda: self.change_font(2)),
+                ('bookmark', 1.1, self.toggle_bookmark),
+                ('notes', 1.5, self.show_notes),
+                ('settings', 1.4, self.show_settings)]
+        for key, weight, cb in spec:
+            b = flat_button('', cb, font_size=sp(12), size_hint_x=weight)
             self.btns[key] = b
-            parent.add_widget(b)
-        for w in (self.bottom_rule, self.seek, r1, r2, r3, r4):
+            row.add_widget(b)
+        self.btns['settings'].text = 'Налаштування'
+        for w in (self.bottom_rule, self.seek, row):
             self.bottom_bar.add_widget(w)
 
     def show_menu(self, show):
@@ -88,24 +75,10 @@ class MenuMixin:
         b = self.btns
         b['minus'].text = 'A−\n%d' % max(8, p['font_size'] - 2)
         b['plus'].text = 'A+\n%d' % (p['font_size'] + 2)
-        b['spacing'].text = 'Інтервал\n%.2f' % p['spacing']
-        b['margin'].text = 'Поля\n%s' % MARGIN_NAMES[p['margin']]
-        b['font'].text = 'Шрифт\n%s' % ('із засічками' if p['font'] == 'serif' and fonts.SERIF
-                                        else 'без засічок')
-        b['eink'].text = 'Режим\n%s' % ('E-ink' if p['eink'] else 'Колір')
-        b['theme'].text = 'Тема\n%s' % ('темна' if p['theme'] == 'dark' else 'світла')
-        b['justify'].text = 'Вирівнювання\n%s' % ('по ширині' if p['justify'] else 'по лівому')
-        b['hyph'].text = 'Переноси\n%s' % ('так' if p['hyph'] else 'ні')
-        b['bold'].text = 'Накреслення\n%s' % ('жирне' if p['bold'] else 'звичайне')
-        b['pages'].text = 'Сторінки\n%s' % ('за книгою' if p['book_pages'] and self.book
-                                            and self.book.pagelist else 'умовні')
         b['bookmark'].text = 'Закладка\n%s' % ('зняти' if self.has_bookmark() else 'додати')
         self._seek_marks()
         e = self.entry or {}
         b['notes'].text = 'Нотатки\n%d закл. · %d вид.' % (len(e.get('bm', ())), len(e.get('hl', ())))
-        b['flash'].text = 'Оновлення\n%s' % ('вимк.' if not p['flash_every'] else
-                                              'щоразу' if p['flash_every'] == 1 else
-                                              'кожні %d' % p['flash_every'])
 
     def show_toc(self):
         if not self.book:

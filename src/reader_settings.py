@@ -1,6 +1,7 @@
 """Налаштування читалки: шрифт, інтервал, поля, режими."""
 
 
+import counter
 import fonts
 from config import FLASH_CYCLE, MARGINS, SPACINGS
 
@@ -43,9 +44,10 @@ class SettingsMixin:
         p['bold'] = not p['bold']
         self._apply(relayout=True)
 
-    def toggle_pages(self):
+    def cycle_counter(self):
         p = self.app.prefs
-        p['book_pages'] = not p['book_pages']
+        p['counter'] = counter.next_mode(p['counter'], bool(self.book and self.book.pagelist))
+        self._layout_foot()
         self._apply(rerender=True)
 
     def toggle_justify(self):

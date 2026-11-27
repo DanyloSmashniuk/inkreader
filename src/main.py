@@ -87,7 +87,10 @@ class InkReaderApp(AndroidMixin, App):
         try:
             with open(self.state_path, encoding='utf-8') as f:
                 data = json.load(f)
-            self.prefs.update(data.get('prefs', {}))
+            saved = data.get('prefs', {})
+            self.prefs.update(saved)
+            if 'counter' not in saved:                 # раніше було «за книгою» чи «умовні»
+                self.prefs['counter'] = 'book' if saved.get('book_pages', True) else 'conv'
             self.library = [e for e in data.get('library', []) if os.path.exists(e['path'])]
         except FileNotFoundError:
             pass                                       # перший запуск

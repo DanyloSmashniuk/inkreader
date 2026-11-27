@@ -6,7 +6,7 @@ DATA_VERSION = 3                      # змінюється, коли міня�
 
 DEFAULT_PREFS = {'font_size': 20, 'theme': 'light', 'eink': True, 'font': 'serif',
                  'flash_every': 6, 'spacing': 1.3, 'margin': 1,
-                 'justify': True, 'hyph': True, 'bold': False, 'book_pages': True}
+                 'justify': True, 'hyph': True, 'bold': False, 'counter': 'book'}
 SPACINGS = [1.15, 1.3, 1.45, 1.6]
 MARGINS = [0.03, 0.055, 0.085]
 MARGIN_NAMES = ['вузькі', 'середні', 'широкі']

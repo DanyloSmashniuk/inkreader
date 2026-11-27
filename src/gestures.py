@@ -135,6 +135,9 @@ class GestureMixin:
         if key == 110:                             # N: нотатки
             self.show_notes()
             return True
+        if key == 115:                             # S: налаштування
+            self.show_settings()
+            return True
         if key == 109:                             # M: меню
             self.show_menu(not self.menu_visible)
             return True

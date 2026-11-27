@@ -29,4 +29,4 @@ show_missing = true
 
 [tool.mypy]
 ignore_missing_imports = true
-files = ["src/book_loader.py", "src/typeset.py", "src/textfix.py", "src/hyph.py", "src/notes.py"]
+files = ["src/book_loader.py", "src/typeset.py", "src/textfix.py", "src/hyph.py", "src/notes.py", "src/counter.py"]

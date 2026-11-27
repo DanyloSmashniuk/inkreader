@@ -1,7 +1,7 @@
 """Екран читання: верстка, малювання сторінки, гортання."""
 import re
 import time
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 
 from kivy.clock import Clock
 from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Translate, Triangle
@@ -10,12 +10,14 @@ from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
 
+import counter
 import fonts
 import notes
 from config import MARGINS
 from gestures import GestureMixin
 from reader_menu import MenuMixin
 from reader_notes import NotesMixin
+from reader_prefs import PrefsMixin
 from reader_settings import SettingsMixin
 from selection import SelectionMixin
 from typeset import Geometry, justify_positions, typeset
@@ -25,7 +27,7 @@ _TOKEN = re.compile(r'\S+')
 MARK_ALPHA = {1: 0.2, 2: 0.4}      # збережене виділення / поточне виділення
 
 
-class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, SettingsMixin, Screen):
+class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, PrefsMixin, MenuMixin, SettingsMixin, Screen):
     """Екран читання: верстка, малювання сторінки, гортання. Меню, нотатки, виділення й жести — у міксинах."""
     FOOTER_H = dp(34)
     inset = (0, 0, 0, 0)          # l, t, r, b — системні панелі Android
@@ -117,6 +119,7 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
         for k, t in book.blocks:
             self.cum.append(tot)
             tot += len(t) if k in 'hpv' else 0
+        self.total_chars = tot
         self.real_total = max(1, -(-tot // PAGE_CH))
         self.pl_blocks = [b for _, b in book.pagelist]
         self.turns = 0
@@ -183,12 +186,8 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
 
         self.geo = Geometry(col_w, n_cols, rows, lh, faces.fs * 1.4,
                             faces.space[False], faces.space[True], p['hyph'])
-        self.foot_l.size = (total * 0.66, dp(24))
-        self.foot_l.text_size = self.foot_l.size
-        self.foot_l.pos = (il + x0, ib + dp(3))
-        self.foot_r.size = (total * 0.34, dp(24))
-        self.foot_r.text_size = self.foot_r.size
-        self.foot_r.pos = (il + x0 + total - self.foot_r.width, ib + dp(3))
+        self._foot_geo = (il + x0, ib + dp(3), total)
+        self._layout_foot()
         self.page.pos, self.page.size = (il, ib), (W, H)
 
         pages, pos = typeset(self.book.blocks, set(self.chap_blocks),
@@ -301,15 +300,47 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, MenuMixin, Settings
         self.foot_l.text = self.chapter_at(self.page_pos[self.idx][0])
         self.foot_l.shorten = True
         self.foot_l.shorten_from = 'right'
-        b0, off0 = self.page_pos[self.idx]
-        if self.book.pagelist and self.app.prefs['book_pages']:
-            j = bisect_right(self.pl_blocks, b0) - 1
-            lab = self.book.pagelist[j][0] if j >= 0 else self.book.pagelist[0][0]
-            self.foot_r.text = '%s з %d  ·  %d%%' % (lab, self.book.page_total, pct)
-        else:
-            real = min(self.real_total, (self.cum[b0] + off0) // PAGE_CH + 1) if self.cum else 1
-            self.foot_r.text = '%d з %d  ·  %d%%' % (real, self.real_total, pct)
+        mode = counter.effective(self.app.prefs['counter'], bool(self.book.pagelist))
+        self.foot_r.text = counter.footer(mode, self._counter_data(pct))
         self.entry['pct'] = pct
+
+    def _layout_foot(self):
+        """Підписи внизу: назва розділу ліворуч, прогрес праворуч (довгий підпис — ширше місце)."""
+        geo = getattr(self, '_foot_geo', None)
+        if not geo:
+            return
+        x, y, total = geo
+        wide = self.app.prefs['counter'] in ('time', 'chapter')
+        share = 0.56 if wide else 0.34
+        self.foot_l.size = (total * (1 - share), dp(24))
+        self.foot_l.text_size = self.foot_l.size
+        self.foot_l.pos = (x, y)
+        self.foot_r.size = (total * share, dp(24))
+        self.foot_r.text_size = self.foot_r.size
+        self.foot_r.pos = (x + total - self.foot_r.width, y)
+
+    def _counter_data(self, pct):
+        """Числа для підпису прогресу (див. counter.footer)."""
+        n, idx = len(self.pages), self.idx
+        b0, off0 = self.page_pos[idx]
+        pos = (self.cum[b0] + off0) if self.cum else 0
+        d = {'pct': pct, 'idx': idx + 1, 'n': n, 'real_total': self.real_total,
+             'real': min(self.real_total, pos // PAGE_CH + 1), 'label': None, 'label_total': 0}
+        if self.book.pagelist:
+            j = bisect_right(self.pl_blocks, b0) - 1
+            d['label'] = self.book.pagelist[j if j >= 0 else 0][0]
+            d['label_total'] = self.book.page_total
+        cb = self.chap_blocks
+        ci = bisect_right(cb, b0) - 1
+        start = bisect_left(self.page_pos, (cb[ci], 0)) if ci >= 0 else 0
+        if ci + 1 < len(cb):
+            end = bisect_left(self.page_pos, (cb[ci + 1], 0))
+            end_chars = self.cum[min(cb[ci + 1], len(self.cum) - 1)] if self.cum else 0
+        else:
+            end, end_chars = n, self.total_chars
+        d.update(ch_page=max(1, idx - start + 1), ch_total=max(1, end - start, idx - start + 1),
+                 left=max(0, end_chars - pos), multi=len(cb) > 1)
+        return d
 
     def _mark(self, bi, a, b, n):
         """0 — звичайне слово, 1 — збережене виділення, 2 — поточне виділення."""
