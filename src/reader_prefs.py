@@ -79,7 +79,7 @@ class PrefsMixin:
                     lst.add_widget(head)
                 lst.add_widget(Rule(color=dim, thick=1))
                 row = FloatLayout(size_hint_y=None, height=ROW_H)
-                row.add_widget(RowButton(text='', color=fg, size_hint=(1, 1),
+                row.add_widget(RowButton(text='', color=fg, size_hint=(1, 1), pos_hint={'x': 0, 'y': 0},
                                          on_release=lambda _w, k=key, a=action: tap(k, a)))
                 left = Label(text=name, color=fg, font_size=sp(16), halign='left', valign='middle',
                              size_hint=(0.55, 1), pos_hint={'x': 0, 'y': 0})

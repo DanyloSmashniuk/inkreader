@@ -81,3 +81,33 @@ def test_old_page_pref_migrates(app, tmp_path):
     state.write_text(json.dumps({'prefs': {'counter': 'pct'}, 'library': []}), encoding='utf-8')
     app._load_state()
     assert app.prefs['counter'] == 'pct'
+
+
+def test_every_settings_row_reacts_to_real_touch(shown, fb2_path):
+    """Справжній дотик по кожному рядку вікна «Налаштування» змінює саме його значення."""
+    from test_ui_smoke import drag
+    app = shown
+    app.add_book(fb2_path)
+    tick(3)
+    r = app.reader
+    r.paginate(r.cur_pos())
+    tick(2)
+    r.show_menu(True)
+    tick(2)
+    bx, by = r.btns['settings'].to_window(r.btns['settings'].center_x, r.btns['settings'].center_y)
+    drag(bx, by, bx, by, steps=1)                         # кнопка «Налаштування» в нижній панелі
+    tick(3)
+    assert r._modal_scroll is not None
+    keys = [k for _g, k, *_ in r.pref_rows()]
+    for i, key in enumerate(keys):
+        if key in ('eink', 'theme', 'font'):              # палітра перебудовує вікно; шрифт може бути єдиним
+            continue
+        rows = sorted((w for w in r._modal_popup.content.walk() if type(w).__name__ == 'RowButton'),
+                      key=lambda w: -w.to_window(w.x, w.y)[1])
+        assert len(rows) == len(keys) and len({round(w.to_window(w.x, w.y)[1]) for w in rows}) == len(rows)
+        before = {k: v for _g, k, _n, v, _a in r.pref_rows()}[key]
+        x, y = rows[i].to_window(rows[i].center_x, rows[i].center_y)
+        drag(x, y, x, y, steps=1)
+        tick(3)
+        after = {k: v for _g, k, _n, v, _a in r.pref_rows()}[key]
+        assert after != before, key
