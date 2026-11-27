@@ -45,6 +45,7 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, PrefsMixin, MenuMix
                           (self.bottom_bar, {'x': l / w, 'y': b / h})):
             bar.size_hint_x = max(0.1, (w - l - r) / w)
             bar.pos_hint = hint
+        self._place_sheet()
 
     def __init__(self, app, **kw):
         super().__init__(**kw)

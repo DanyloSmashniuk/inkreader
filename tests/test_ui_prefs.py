@@ -148,3 +148,17 @@ def test_every_settings_row_reacts_to_real_touch(shown, fb2_path):
         tick(3)
         after = {k: v for _g, k, _n, v, _a in r.pref_rows()}[key]
         assert after != before, key
+
+
+def test_settings_sheet_stays_above_system_bar(reading):
+    app, r = reading
+    r.set_insets(0, 40, 0, 120)                           # нижня панель навігації Android
+    r.show_settings()
+    tick(2)
+    assert r.sheet.y == 0 and r._sheet_pad.height == 120
+    tile = sheet_tiles(r)[0]
+    scr = r._sheet_scroll
+    assert scr.y >= 120 - 1                               # прокручуваний список починається над панеллю
+    assert tile.width > 0
+    r.set_insets(0, 40, 0, 0)
+    assert r._sheet_pad.height == 0
