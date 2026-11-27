@@ -1,19 +1,22 @@
-"""Вікно «Налаштування»: усі рідкісні параметри читалки списком (назва зліва, значення справа)."""
+"""Панель «Налаштування»: нижній аркуш, під яким текст книги видно й змінюється одразу."""
 from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 
 import counter
 import fonts
 from config import MARGIN_NAMES
-from widgets import RowButton, Rule, flat_button, make_scroll, scroll_by
+from widgets import BgBox, Rule, Tile, flat_button, make_scroll
 
-ROW_H = dp(56)
+TILE_H = dp(62)
 
 
 class PrefsMixin:
     """Примішується до ReaderScreen."""
+
+    sheet = None
+    _sheet_scroll = None
 
     def pref_rows(self):
         """[(група, ключ, назва, значення, дія)] у порядку показу."""
@@ -38,61 +41,96 @@ class PrefsMixin:
         ]
 
     def show_settings(self):
+        """Відкриває (або закриває, якщо вже відкрита) нижню панель налаштувань."""
         if not self.book:
             return
+        if self.sheet is not None:
+            self.close_settings()
+            return
+        self.show_menu(False)
+        self._open_sheet(1.0)
+
+    def close_settings(self):
+        if self.sheet is not None:
+            self.root_f.remove_widget(self.sheet)
+            self.sheet = self._sheet_scroll = None
+
+    def _open_sheet(self, scroll_y):
+        """Будує панель наново (потрібно лише після зміни палітри)."""
+        if self.sheet is not None:
+            self.root_f.remove_widget(self.sheet)
         bg, fg = self.app.colors
         dim = (fg[0], fg[1], fg[2], 0.4)
+        height = max(dp(300), self.height * 0.46)
+        sheet = BgBox(color=bg, orientation='vertical', size_hint=(1, None), height=height,
+                      pos_hint={'x': 0, 'y': 0})
+        head = BoxLayout(size_hint_y=None, height=dp(58), padding=(dp(14), 0, dp(4), 0))
+        title = Label(text='[b]Налаштування[/b]\n[size=%d]зміни видно одразу · торкнись тексту вгорі, '
+                      'щоб закрити[/size]' % int(sp(11)), markup=True, color=fg, font_size=sp(17),
+                      halign='left', valign='middle')
+        title.bind(size=lambda w, s: setattr(w, 'text_size', s))
+        done = flat_button('Готово', self.close_settings, fg, font_size=sp(16), bold=True,
+                           size_hint_x=None, width=dp(104))
+        head.add_widget(title)
+        head.add_widget(done)
         scroll = make_scroll(fg)
         scroll.do_scroll_x = False
-        lst = BoxLayout(orientation='vertical', size_hint_y=None)
-        lst.bind(minimum_height=lst.setter('height'))
-        scroll.add_widget(lst)
-        nav = BoxLayout(size_hint_y=None, height=dp(48))
-        nav.add_widget(flat_button('Вгору', lambda: scroll_by(scroll, scroll.height * 0.9), fg))
-        nav.add_widget(flat_button('Вниз', lambda: scroll_by(scroll, -scroll.height * 0.9), fg))
-        box = BoxLayout(orientation='vertical')
-        for w in (scroll, Rule(color=dim, thick=1), nav):
-            box.add_widget(w)
-        popup = self.app.make_popup('Налаштування', box, (0.94, 0.88))
-        recolor = {'eink', 'theme'}               # змінюють палітру: вікно відкриваємо знову
+        body = BoxLayout(orientation='vertical', size_hint_y=None, padding=(dp(12), dp(4), dp(12), dp(10)),
+                         spacing=dp(6))
+        body.bind(minimum_height=body.setter('height'))
+        scroll.add_widget(body)
+
+        tiles = {}
+        size_val = Label(color=fg, font_size=sp(18), bold=True, size_hint_x=0.3)
+
+        def refresh():
+            size_val.text = '%d' % self.app.prefs['font_size']
+            for _g, key, name, value, _a in self.pref_rows():
+                tiles[key].set_texts(name, value)
 
         def tap(key, action):
             action()
-            if key in recolor:
-                y = scroll.scroll_y
-                popup.dismiss()
-                self.show_settings()
-                self._modal_scroll.scroll_y = y
+            if key in ('eink', 'theme'):              # змінюють палітру: панель будуємо знову
+                self._open_sheet(scroll.scroll_y)
             else:
-                fill()
+                refresh()
 
-        def fill():
-            y = scroll.scroll_y
-            lst.clear_widgets()
-            group = None
-            for g, key, name, value, action in self.pref_rows():
-                if g != group:
-                    group = g
-                    head = Label(text=g.upper(), color=(fg[0], fg[1], fg[2], 0.65), font_size=sp(12),
-                                 halign='left', valign='bottom', size_hint_y=None, height=dp(34))
-                    head.bind(size=lambda w, s: setattr(w, 'text_size', (s[0] - dp(24), s[1] - dp(4))))
-                    lst.add_widget(head)
-                lst.add_widget(Rule(color=dim, thick=1))
-                row = FloatLayout(size_hint_y=None, height=ROW_H)
-                row.add_widget(RowButton(text='', color=fg, size_hint=(1, 1), pos_hint={'x': 0, 'y': 0},
-                                         on_release=lambda _w, k=key, a=action: tap(k, a)))
-                left = Label(text=name, color=fg, font_size=sp(16), halign='left', valign='middle',
-                             size_hint=(0.55, 1), pos_hint={'x': 0, 'y': 0})
-                right = Label(text=value, color=(fg[0], fg[1], fg[2], 0.8), font_size=sp(16),
-                              halign='right', valign='middle', size_hint=(0.45, 1),
-                              pos_hint={'right': 1, 'y': 0})
-                for lbl in (left, right):
-                    lbl.bind(size=lambda w, s: setattr(w, 'text_size', (s[0] - dp(24), s[1])))
-                    row.add_widget(lbl)
-                lst.add_widget(row)
-            lst.add_widget(Rule(color=dim, thick=1))
-            scroll.scroll_y = y
-        fill()
-        self._modal_popup, self._modal_scroll = popup, scroll
-        popup.bind(on_dismiss=lambda *_: setattr(self, '_modal_scroll', None))
-        popup.open()
+        def step(delta):
+            self.change_font(delta)
+            refresh()
+
+        def header(text):
+            lbl = Label(text=text.upper(), color=(fg[0], fg[1], fg[2], 0.65), font_size=sp(12),
+                        halign='left', valign='bottom', size_hint_y=None, height=dp(26))
+            lbl.bind(size=lambda w, s: setattr(w, 'text_size', s))
+            return lbl
+
+        size_row = BoxLayout(size_hint_y=None, height=TILE_H, spacing=dp(8))
+        cap = Label(text='Розмір шрифту', color=fg, font_size=sp(16), halign='left', valign='middle',
+                    size_hint_x=0.4)
+        cap.bind(size=lambda w, s: setattr(w, 'text_size', s))
+        minus = Tile(fg, text='[b]A−[/b]', font_size=sp(20), halign='center', on_release=lambda *_: step(-2))
+        plus = Tile(fg, text='[b]A+[/b]', font_size=sp(20), halign='center', on_release=lambda *_: step(2))
+        for w in (cap, minus, size_val, plus):
+            size_row.add_widget(w)
+
+        group, grid = None, None
+        for g, key, _n, _v, action in self.pref_rows():
+            if g != group:
+                group = g
+                body.add_widget(header(g))
+                if g == 'Текст':
+                    body.add_widget(size_row)
+                grid = GridLayout(cols=2, size_hint_y=None, spacing=dp(8), row_default_height=TILE_H,
+                                  row_force_default=True)
+                grid.bind(minimum_height=grid.setter('height'))
+                body.add_widget(grid)
+            t = Tile(fg, on_release=lambda _w, k=key, a=action: tap(k, a))
+            tiles[key] = t
+            grid.add_widget(t)
+        refresh()
+        for w in (head, Rule(color=dim, thick=1), scroll):
+            sheet.add_widget(w)
+        self.sheet, self._sheet_scroll = sheet, scroll
+        self.root_f.add_widget(sheet)
+        scroll.scroll_y = scroll_y

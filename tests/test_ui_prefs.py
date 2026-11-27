@@ -8,6 +8,8 @@ pytest.importorskip('kivy')
 from test_ui_notes import long_paras, reading  # noqa: E402,F401  (фікстури)
 from test_ui_smoke import app, shown, tick  # noqa: E402,F401
 
+from config import MARGIN_NAMES  # noqa: E402
+
 
 def buttons(widget):
     from kivy.uix.button import Button
@@ -22,25 +24,54 @@ def test_bottom_bar_is_one_row(reading):
     assert r.btns['plus'].text.startswith('A+') and r.btns['notes'].text.startswith('Нотатки')
 
 
-def test_settings_popup_taps_and_keys(reading):
+def sheet_tiles(r):
+    return [w for w in r.sheet.walk() if type(w).__name__ == 'Tile' and '[b]A' not in w.text]
+
+
+def test_settings_sheet_taps_and_keys(reading):
     app, r = reading
     start = app.prefs['margin']
-    assert app._on_key(None, 115) is True                 # S відкриває вікно
-    assert r._modal_scroll is not None
+    assert app._on_key(None, 115) is True                 # S відкриває панель
+    assert r.sheet is not None
     rows = r.pref_rows()
     assert [x[0] for x in rows].count('Текст') == 6 and [x[0] for x in rows].count('Екран') == 4
-    btns = [b for b in buttons(r._modal_popup.content) if b.text == '']   # рядки, крім «Вгору/Вниз»
-    assert len(btns) == len(rows)
-    btns[2].dispatch('on_release')                        # «Поля»: наступне значення, вікно лишається
-    assert app.prefs['margin'] != start and r._modal_scroll is not None
-    theme = app.prefs['theme']
-    old = r._modal_popup
-    btns[7].dispatch('on_release')                        # «Тема»: палітра змінилась, вікно відкрито знову
+    tiles = sheet_tiles(r)
+    assert len(tiles) == len(rows)
+    tiles[2].dispatch('on_release')                       # «Поля»: значення змінилось, панель лишилась
+    assert app.prefs['margin'] != start and r.sheet is not None
+    assert MARGIN_NAMES[app.prefs['margin']] in tiles[2].text   # плитка показує нове значення
+    size = app.prefs['font_size']
+    plus = [w for w in r.sheet.walk() if type(w).__name__ == 'Tile' and w.text == '[b]A+[/b]'][0]
+    plus.dispatch('on_release')
+    assert app.prefs['font_size'] == size + 2
+    theme, old = app.prefs['theme'], r.sheet
+    tiles[7].dispatch('on_release')                       # «Тема»: палітра змінилась, панель перебудована
     tick(2)
-    assert app.prefs['theme'] != theme and r._modal_scroll is not None and r._modal_popup is not old
+    assert app.prefs['theme'] != theme and r.sheet is not None and r.sheet is not old
     assert app._on_key(None, 27) is True                  # Esc закриває
+    assert r.sheet is None
+
+
+def test_settings_sheet_closes_by_tap_on_text_and_done(reading):
+    from test_ui_smoke import drag
+    app, r = reading
+    r.show_settings()
     tick(2)
-    assert r._modal_scroll is None
+    assert r.sheet is not None and r.sheet.height < r.height * 0.6   # текст зверху лишається видимим
+    r.show_settings()                                     # повторний виклик закриває
+    assert r.sheet is None
+    r.show_settings()
+    x, y = r.width / 2, r.height * 0.9                    # дотик по тексту над панеллю
+    drag(x, y, x, y, steps=1)
+    tick(2)
+    assert r.sheet is None
+    r.show_settings()
+    done = [w for w in r.sheet.walk() if getattr(w, 'text', '') == 'Готово'][0]
+    done.dispatch('on_release')
+    assert r.sheet is None
+    r.show_settings()
+    r.back()                                              # кнопка «Назад» на Android
+    assert r.sheet is None
 
 
 def test_counter_modes_in_footer(reading):
@@ -97,16 +128,22 @@ def test_every_settings_row_reacts_to_real_touch(shown, fb2_path):
     bx, by = r.btns['settings'].to_window(r.btns['settings'].center_x, r.btns['settings'].center_y)
     drag(bx, by, bx, by, steps=1)                         # кнопка «Налаштування» в нижній панелі
     tick(3)
-    assert r._modal_scroll is not None
+    assert r.sheet is not None
     keys = [k for _g, k, *_ in r.pref_rows()]
     for i, key in enumerate(keys):
-        if key in ('eink', 'theme', 'font'):              # палітра перебудовує вікно; шрифт може бути єдиним
+        if key in ('eink', 'theme', 'font'):              # палітра перебудовує панель; шрифт може бути єдиним
             continue
-        rows = sorted((w for w in r._modal_popup.content.walk() if type(w).__name__ == 'RowButton'),
-                      key=lambda w: -w.to_window(w.x, w.y)[1])
-        assert len(rows) == len(keys) and len({round(w.to_window(w.x, w.y)[1]) for w in rows}) == len(rows)
+        tiles = sheet_tiles(r)
+        assert len(tiles) == len(keys)
         before = {k: v for _g, k, _n, v, _a in r.pref_rows()}[key]
-        x, y = rows[i].to_window(rows[i].center_x, rows[i].center_y)
+        scr, tile = r._sheet_scroll, tiles[i]
+        for sy in (1.0, 0.75, 0.5, 0.25, 0.0):             # прокручуємо, доки плитка не стане видимою
+            scr.scroll_y = sy
+            tick(2)
+            if scr.collide_point(*tile.to_window(tile.center_x, tile.center_y)):
+                break
+        x, y = tile.to_window(tile.center_x, tile.center_y)
+        assert r.sheet.collide_point(x, y) and scr.collide_point(x, y), key
         drag(x, y, x, y, steps=1)
         tick(3)
         after = {k: v for _g, k, _n, v, _a in r.pref_rows()}[key]

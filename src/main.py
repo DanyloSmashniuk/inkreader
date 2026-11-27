@@ -16,6 +16,8 @@ os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', 'InkReader')   # збігаєть
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.metrics import dp
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import NoTransition, ScreenManager
@@ -28,9 +30,7 @@ from config import DATA_VERSION, DEFAULT_PREFS, VIEWS, palette
 from file_browser import browse_books
 from library import LibraryScreen
 from reader import ReaderScreen
-from widgets import (
-    ICON_PATH,
-)
+from widgets import ICON_PATH, Rule, flat_button
 
 log = logging.getLogger('inkreader')
 
@@ -124,11 +124,22 @@ class InkReaderApp(AndroidMixin, App):
         self.save_state()
         self.restyle()
 
-    def make_popup(self, title, content, size_hint=(0.88, 0.4)):
+    def make_popup(self, title, content, size_hint=(0.88, 0.4), closer=True):
+        """Вікно з заголовком; closer додає внизу помітну кнопку «Закрити»."""
         bg, fg = self.colors
-        return Popup(title=title, content=content, size_hint=size_hint, background='',
-                     background_color=bg, title_color=fg, separator_color=fg,
-                     overlay_color=(0, 0, 0, 0.35), auto_dismiss=True)
+        if closer:
+            box = BoxLayout(orientation='vertical')
+            box.add_widget(content)
+            box.add_widget(Rule(color=(fg[0], fg[1], fg[2], 0.4), thick=1))
+            btn = flat_button('Закрити', lambda: None, fg, bold=True, size_hint_y=None, height=dp(48))
+            box.add_widget(btn)
+            content = box
+        popup = Popup(title=title, content=content, size_hint=size_hint, background='',
+                      background_color=bg, title_color=fg, separator_color=fg,
+                      overlay_color=(0, 0, 0, 0.35), auto_dismiss=True)
+        if closer:
+            btn.bind(on_release=lambda *_: popup.dismiss())
+        return popup
 
     def message(self, title, text):
         lbl = Label(text=text, halign='center', color=self.colors[1])

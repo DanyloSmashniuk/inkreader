@@ -6,13 +6,14 @@ import sys
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.effects.scroll import ScrollEffect
-from kivy.graphics import Color, Rectangle, RenderContext
-from kivy.metrics import dp
+from kivy.graphics import Color, Line, Rectangle, RenderContext, RoundedRectangle
+from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
+from kivy.utils import escape_markup, get_hex_from_color
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +93,37 @@ class RowButton(Button):
                          background_normal='', background_down='',
                          background_color=(0, 0, 0, 0), **kw)
         self.bind(size=lambda w, s: setattr(w, 'text_size', (s[0] - dp(12), s[1])))
+
+
+class Tile(Button):
+    """Плитка параметра: дрібна назва зверху, значення нижче; рамка, підсвітка при натисканні."""
+
+    def __init__(self, fg, **kw):
+        kw.setdefault('halign', 'left')
+        super().__init__(markup=True, valign='middle', background_normal='',
+                         background_down='', background_color=(0, 0, 0, 0), color=fg, **kw)
+        self.fg = fg
+        with self.canvas.before:
+            self._fill_c = Color(fg[0], fg[1], fg[2], 0)
+            self._fill = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(10)])
+        with self.canvas.after:
+            Color(fg[0], fg[1], fg[2], 0.55)
+            self._edge = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(10)),
+                              width=1.1)
+        self.bind(pos=self._upd, size=self._upd, state=self._press)
+
+    def set_texts(self, name, value):
+        hexa = get_hex_from_color((self.fg[0], self.fg[1], self.fg[2], 0.7))
+        self.text = '[size=%d][color=%s]%s[/color][/size]\n[b]%s[/b]' % (
+            int(sp(12)), hexa, escape_markup(name), escape_markup(value))
+
+    def _upd(self, *_):
+        self._fill.pos, self._fill.size = self.pos, self.size
+        self._edge.rounded_rectangle = (self.x, self.y, self.width, self.height, dp(10))
+        self.text_size = (self.width - dp(20), self.height)
+
+    def _press(self, _w, state):
+        self._fill_c.a = 0.16 if state == 'down' else 0
 
 
 def _icon_path():

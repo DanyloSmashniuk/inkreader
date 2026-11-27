@@ -110,6 +110,7 @@ class ReaderScreen(GestureMixin, SelectionMixin, NotesMixin, PrefsMixin, MenuMix
 
     # ---------- відкриття
     def open(self, entry, book):
+        self.close_settings()
         self.entry = entry
         self.book = book
         self.pages, self.page_pos = [], []

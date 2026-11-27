@@ -92,9 +92,10 @@ class MenuMixin:
         nav = BoxLayout(size_hint_y=None, height=dp(48))
         nav.add_widget(flat_button('Вгору', lambda: scroll_by(scroll, scroll.height * 0.9), fg))
         nav.add_widget(flat_button('Вниз', lambda: scroll_by(scroll, -scroll.height * 0.9), fg))
+        nav.add_widget(flat_button('Закрити', lambda: self._modal_popup.dismiss(), fg, bold=True))
         box.add_widget(Rule(color=(fg[0], fg[1], fg[2], 0.4), thick=1))
         box.add_widget(nav)
-        popup = self.app.make_popup('Зміст', box, (0.94, 0.88))
+        popup = self.app.make_popup('Зміст', box, (0.94, 0.88), closer=False)
         chapters = self.book.chapters or [('Початок', 0)]
         ci = bisect_right(self.chap_blocks, self.page_pos[self.idx][0]) - 1 if self.pages else -1
         for i, (title, block) in enumerate(chapters):

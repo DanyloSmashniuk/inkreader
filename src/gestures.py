@@ -10,11 +10,15 @@ class GestureMixin:
 
     def leave(self):
         """Кнопка «Бібліотека»: одразу до бібліотеки (меню закривається само)."""
+        self.close_settings()
         self.show_menu(False)
         self.app.save_state()
         self.app.show_library()
 
     def back(self):
+        if self.sheet is not None:
+            self.close_settings()
+            return
         if self.menu_visible:
             self.show_menu(False)
             return
@@ -25,7 +29,7 @@ class GestureMixin:
         if super().on_touch_down(touch):
             return True
         self._cancel_long_press()
-        if (self.pages and not self.menu_visible and self.collide_point(*touch.pos)
+        if (self.pages and not self.menu_visible and self.sheet is None and self.collide_point(*touch.pos)
                 and getattr(touch, 'button', None) in (None, 'left')
                 and not (self.sel and self.sel_bar.collide_point(*touch.pos))):
             self._arm_long_press(touch)
@@ -62,6 +66,8 @@ class GestureMixin:
             return True
         if self.sel and self.sel_bar.collide_point(*touch.opos):
             return True
+        if self.sheet is not None and self.sheet.collide_point(*touch.opos):
+            return True
         dx = touch.pos[0] - touch.opos[0]
         dy = touch.pos[1] - touch.opos[1]
         if abs(dx) > dp(40) and abs(dx) > 1.5 * abs(dy):
@@ -72,6 +78,8 @@ class GestureMixin:
             x = touch.opos[0] / max(1, self.width)
             if self.sel:                              # дотик поза панеллю знімає виділення
                 self.clear_selection()
+            elif self.sheet is not None:               # дотик по тексту закриває налаштування
+                self.close_settings()
             elif self.menu_visible:
                 self.show_menu(False)
             elif x < 0.3:
@@ -84,6 +92,14 @@ class GestureMixin:
         return False
 
     def handle_key(self, key):
+        if self.sheet is not None:                 # панель налаштувань: Esc/S закривають, стрілки гортають
+            sv = self._sheet_scroll
+            page = sv.height * 0.9
+            if key in (27, 115):
+                self.close_settings()
+            elif key in (274, 273, 281, 280):
+                scroll_by(sv, {274: -dp(104), 273: dp(104), 281: -page, 280: page}[key])
+            return True
         sv = getattr(self, '_modal_scroll', None)
         if sv is not None:                         # відкритий зміст чи нотатки: клавіші гортають їх
             page = sv.height * 0.9

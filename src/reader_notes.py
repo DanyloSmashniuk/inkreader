@@ -67,11 +67,12 @@ class NotesMixin:
         nav = BoxLayout(size_hint_y=None, height=dp(48))
         nav.add_widget(flat_button('Вгору', lambda: scroll_by(scroll, scroll.height * 0.9), fg))
         nav.add_widget(flat_button('Вниз', lambda: scroll_by(scroll, -scroll.height * 0.9), fg))
+        nav.add_widget(flat_button('Закрити', lambda: self._modal_popup.dismiss(), fg, bold=True))
         box = BoxLayout(orientation='vertical')
         for w in (tabs, Rule(color=(fg[0], fg[1], fg[2], 0.4), thick=1), scroll,
                   Rule(color=(fg[0], fg[1], fg[2], 0.4), thick=1), nav):
             box.add_widget(w)
-        popup = self.app.make_popup('Нотатки', box, (0.94, 0.88))
+        popup = self.app.make_popup('Нотатки', box, (0.94, 0.88), closer=False)
         state = {'tab': tab}
         group = []                                       # відкриті рядки зі свайпом
 

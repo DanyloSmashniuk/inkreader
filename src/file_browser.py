@@ -55,7 +55,7 @@ def browse_books(app):
     lst.bind(minimum_height=lst.setter('height'))
     sv.add_widget(lst)
     outer.add_widget(sv)
-    popup = app.make_popup('Обери книгу', outer, (0.95, 0.92))
+    popup = app.make_popup('Обери книгу', outer, (0.95, 0.92), closer=False)
     outer.add_widget(Rule(fg, 1))
     outer.add_widget(flat_button('Скасувати', popup.dismiss, fg,
                                  size_hint_y=None, height=dp(48)))
