@@ -162,3 +162,13 @@ def test_settings_sheet_stays_above_system_bar(reading):
     assert tile.width > 0
     r.set_insets(0, 40, 0, 0)
     assert r._sheet_pad.height == 0
+
+
+def test_font_size_caption_fits(reading):
+    app, r = reading
+    r.show_settings()
+    tick(2)
+    cap = [w for w in r.sheet.walk() if getattr(w, 'text', '') == 'Розмір'][0]
+    cap.text_size = (None, None)                          # природна ширина слова без обмеження
+    cap.texture_update()
+    assert cap.width >= cap.texture_size[0] + 4           # слово вміщується в один рядок

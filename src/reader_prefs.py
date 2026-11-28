@@ -91,7 +91,7 @@ class PrefsMixin:
         scroll.add_widget(body)
 
         tiles = {}
-        size_val = Label(color=fg, font_size=sp(18), bold=True, size_hint_x=0.3)
+        size_val = Label(color=fg, font_size=sp(18), bold=True, size_hint_x=None, width=dp(56))
 
         def refresh():
             size_val.text = '%d' % self.app.prefs['font_size']
@@ -117,7 +117,7 @@ class PrefsMixin:
 
         size_row = BoxLayout(size_hint_y=None, height=TILE_H, spacing=dp(8))
         cap = Label(text='Розмір', color=fg, font_size=sp(16), halign='left', valign='middle',
-                    size_hint_x=0.3)
+                    size_hint_x=None, width=dp(88))
         cap.bind(size=lambda w, s: setattr(w, 'text_size', s))
         minus = Tile(fg, text='[b]A−[/b]', font_size=sp(20), halign='center', on_release=lambda *_: step(-2))
         plus = Tile(fg, text='[b]A+[/b]', font_size=sp(20), halign='center', on_release=lambda *_: step(2))
